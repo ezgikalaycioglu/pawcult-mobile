@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   SafeAreaView,
   Text,
@@ -10,33 +9,47 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { authScreenStyles as styles } from '../styles/authScreenStyles';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'ForgotPassword'>;
 
-export const LoginScreen = ({ navigation }: Props) => {
-  const { signIn } = useAuth();
+export const ForgotPasswordScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Missing information', 'Please enter your email and password.');
+  const handleSendResetEmail = async () => {
+    if (!email.trim()) {
+      setErrorMessage('Please enter the email address for your account.');
       return;
     }
 
     setSubmitting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
-      await signIn(email.trim(), password);
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: 'pawcult://reset-password',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage(
+        'If that email exists in PawCult, we sent a password reset link.'
+      );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Unable to sign in right now.';
+        error instanceof Error
+          ? error.message
+          : 'Unable to send the password reset email right now.';
 
-      Alert.alert('Login failed', message);
+      setErrorMessage(message);
     } finally {
       setSubmitting(false);
     }
@@ -51,8 +64,10 @@ export const LoginScreen = ({ navigation }: Props) => {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.title}>Sign In</Text>
-          <Text style={styles.subtitle}>Welcome back to PawCult</Text>
+          <Text style={styles.title}>Forgot Password</Text>
+          <Text style={styles.subtitle}>
+            Enter your email and we&apos;ll send you a reset link.
+          </Text>
 
           <View style={styles.form}>
             <TextInput
@@ -65,19 +80,18 @@ export const LoginScreen = ({ navigation }: Props) => {
               style={styles.input}
               value={email}
             />
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor="#94a3b8"
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
+
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
+
+            {successMessage ? (
+              <Text style={styles.successText}>{successMessage}</Text>
+            ) : null}
 
             <Pressable
               disabled={submitting}
-              onPress={handleLogin}
+              onPress={handleSendResetEmail}
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && !submitting ? styles.primaryButtonPressed : null,
@@ -87,30 +101,18 @@ export const LoginScreen = ({ navigation }: Props) => {
               {submitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.primaryButtonText}>Sign In</Text>
+                <Text style={styles.primaryButtonText}>Send Reset Email</Text>
               )}
             </Pressable>
 
             <Pressable
               disabled={submitting}
-              onPress={() => navigation.navigate('ForgotPassword')}
+              onPress={() => navigation.navigate('Login')}
               style={styles.secondaryButton}
             >
               <Text style={styles.secondaryButtonText}>
-                Forgot your password?{' '}
-                <Text style={styles.secondaryButtonLink}>Reset it</Text>
-              </Text>
-            </Pressable>
-
-            <View style={styles.divider} />
-
-            <Pressable
-              disabled={submitting}
-              onPress={() => navigation.navigate('Signup')}
-              style={styles.secondaryButton}
-            >
-              <Text style={styles.secondaryButtonText}>
-                Don&apos;t have an account? <Text style={styles.secondaryButtonLink}>Sign Up</Text>
+                Remembered it?{' '}
+                <Text style={styles.secondaryButtonLink}>Back to sign in</Text>
               </Text>
             </Pressable>
           </View>

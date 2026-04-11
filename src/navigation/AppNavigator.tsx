@@ -1,19 +1,36 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Linking from 'expo-linking';
 
 import { useAuth } from '../context/AuthContext';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { SignupScreen } from '../screens/SignupScreen';
 
 export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: undefined;
   Home: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const linking = {
+  prefixes: [Linking.createURL('/'), 'pawcult://'],
+  config: {
+    screens: {
+      Login: 'login',
+      Signup: 'signup',
+      ForgotPassword: 'forgot-password',
+      ResetPassword: 'reset-password',
+      Home: 'home',
+    },
+  },
+};
 
 const AuthLoadingScreen = () => (
   <View style={styles.loadingContainer}>
@@ -30,7 +47,7 @@ export const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
         {user ? (
           <Stack.Screen
@@ -50,8 +67,18 @@ export const AppNavigator = () => {
               component={SignupScreen}
               options={{ title: 'Sign Up' }}
             />
+            <Stack.Screen
+              name="ForgotPassword"
+              component={ForgotPasswordScreen}
+              options={{ title: 'Forgot Password' }}
+            />
           </>
         )}
+        <Stack.Screen
+          name="ResetPassword"
+          component={ResetPasswordScreen}
+          options={{ title: 'Reset Password' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
