@@ -54,8 +54,8 @@ const styles = StyleSheet.create({
     width: 44,
   },
   logo: {
-    height: 42,
-    width: 110,
+    height: 52,
+    width: 144,
   },
   menuButton: {
     alignItems: 'center',

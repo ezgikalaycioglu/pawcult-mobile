@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 
 import { useAuth } from '../context/AuthContext';
+import { CreatePetScreen } from '../screens/CreatePetScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   ResetPassword: undefined;
   App: undefined;
+  CreatePet: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -28,6 +30,7 @@ const linking = {
       ForgotPassword: 'forgot-password',
       ResetPassword: 'reset-password',
       App: 'home',
+      CreatePet: 'pets/create',
     },
   },
 };
@@ -46,34 +49,54 @@ export const AppNavigator = () => {
     return <AuthLoadingScreen />;
   }
 
-  return (
-    <NavigationContainer linking={linking}>
-      <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
-        {user ? (
+  if (user) {
+    return (
+      <NavigationContainer linking={linking}>
+        <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
           <Stack.Screen
             name="App"
             component={SignedInShell}
             options={{ headerShown: false }}
           />
-        ) : (
-          <>
-            <Stack.Screen
-              name="Login"
-              component={LoginScreen}
-              options={{ title: 'Log In' }}
-            />
-            <Stack.Screen
-              name="Signup"
-              component={SignupScreen}
-              options={{ title: 'Sign Up' }}
-            />
-            <Stack.Screen
-              name="ForgotPassword"
-              component={ForgotPasswordScreen}
-              options={{ title: 'Forgot Password' }}
-            />
-          </>
-        )}
+          <Stack.Screen
+            name="CreatePet"
+            component={CreatePetScreen}
+            options={{
+              title: 'Add Pet',
+              headerShadowVisible: false,
+              headerStyle: { backgroundColor: '#f8fafc' },
+              headerTintColor: '#8b5cf6',
+              headerTitleStyle: { color: '#0f172a', fontWeight: '700' },
+            }}
+          />
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
+            options={{ title: 'Reset Password' }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
+  return (
+    <NavigationContainer linking={linking}>
+      <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ title: 'Log In' }}
+        />
+        <Stack.Screen
+          name="Signup"
+          component={SignupScreen}
+          options={{ title: 'Sign Up' }}
+        />
+        <Stack.Screen
+          name="ForgotPassword"
+          component={ForgotPasswordScreen}
+          options={{ title: 'Forgot Password' }}
+        />
         <Stack.Screen
           name="ResetPassword"
           component={ResetPasswordScreen}

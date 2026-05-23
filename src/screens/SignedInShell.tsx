@@ -8,7 +8,7 @@ import { MoreMenuModal } from '../components/MoreMenuModal';
 import { PlaceholderModal } from '../components/PlaceholderModal';
 import { useAuth } from '../context/AuthContext';
 import { CheckInScreen } from './CheckInScreen';
-import { HomeScreen } from './HomeScreen';
+import { ProfileScreen } from './ProfileScreen';
 
 type PlaceholderType = 'settings' | 'contact' | null;
 
@@ -51,7 +51,7 @@ export const SignedInShell = () => {
         <MobileTopNav onOpenMenu={() => setIsMenuOpen(true)} topInset={insets.top} />
 
         <View style={styles.content}>
-          {activeTab === 'check-in' ? <CheckInScreen /> : <HomeScreen />}
+          {activeTab === 'check-in' ? <CheckInScreen /> : <ProfileScreen />}
         </View>
 
         <MobileBottomNav

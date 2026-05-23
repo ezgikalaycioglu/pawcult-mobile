@@ -23,14 +23,14 @@ const styles = StyleSheet.create({
   },
   badge: {
     alignItems: 'center',
-    backgroundColor: '#dcfce7',
+    backgroundColor: '#ede9fe',
     borderRadius: 28,
     height: 56,
     justifyContent: 'center',
     width: 56,
   },
   badgeIcon: {
-    color: '#16a34a',
+    color: '#8b5cf6',
     fontSize: 28,
     fontWeight: '700',
   },

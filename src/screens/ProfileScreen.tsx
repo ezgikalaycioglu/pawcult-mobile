@@ -15,7 +15,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export const HomeScreen = () => {
+export const ProfileScreen = () => {
   const { pets } = usePetProfiles();
   const navigation = useNavigation<NavigationProp>();
 
@@ -39,14 +39,6 @@ export const HomeScreen = () => {
         <View style={styles.countPill}>
           <Text style={styles.countPillText}>{petSummary}</Text>
         </View>
-
-        <Pressable
-          onPress={() => navigation.navigate('CreatePet')}
-          style={({ pressed }) => [styles.addPetButton, pressed ? styles.addPetButtonPressed : null]}
-        >
-          <Text style={styles.addPetButtonIcon}>＋</Text>
-          <Text style={styles.addPetButtonText}>Add Pet</Text>
-        </Pressable>
       </View>
 
       {pets.length === 0 ? (
@@ -89,6 +81,14 @@ export const HomeScreen = () => {
           ))}
         </View>
       )}
+
+      <Pressable
+        onPress={() => navigation.navigate('CreatePet')}
+        style={({ pressed }) => [styles.addPetButton, pressed ? styles.addPetButtonPressed : null]}
+      >
+        <Text style={styles.addPetButtonIcon}>＋</Text>
+        <Text style={styles.addPetButtonText}>Add Pet</Text>
+      </Pressable>
     </ScrollView>
   );
 };
@@ -147,31 +147,6 @@ const styles = StyleSheet.create({
     color: '#6d28d9',
     fontSize: 13,
     fontWeight: '600',
-  },
-  addPetButton: {
-    alignItems: 'center',
-    backgroundColor: '#8b5cf6',
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-    minHeight: 54,
-    paddingHorizontal: 20,
-    width: '100%',
-  },
-  addPetButtonPressed: {
-    opacity: 0.9,
-  },
-  addPetButtonIcon: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    marginRight: 8,
-  },
-  addPetButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
   },
   emptyCard: {
     alignItems: 'center',
@@ -257,5 +232,29 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 20,
     marginTop: 12,
+  },
+  addPetButton: {
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  addPetButtonPressed: {
+    opacity: 0.9,
+  },
+  addPetButtonIcon: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  addPetButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

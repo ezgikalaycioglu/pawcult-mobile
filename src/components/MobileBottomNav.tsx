@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   itemActive: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#f5f3ff',
   },
   itemPressed: {
     opacity: 0.82,
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   iconActive: {
-    color: '#16a34a',
+    color: '#8b5cf6',
   },
   label: {
     color: '#6b7280',
@@ -108,6 +108,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   labelActive: {
-    color: '#16a34a',
+    color: '#8b5cf6',
   },
 });

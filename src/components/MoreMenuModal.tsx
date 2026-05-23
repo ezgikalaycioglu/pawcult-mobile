@@ -56,8 +56,8 @@ export const MoreMenuModal = ({
             }}
             style={({ pressed }) => [styles.item, pressed ? styles.itemPressed : null]}
           >
-            <Text style={[styles.itemIcon, styles.logOutText]}>↩</Text>
-            <Text style={[styles.itemText, styles.logOutText]}>Log Out</Text>
+            <Text style={[styles.itemIcon, styles.itemIcon]}>↩</Text>
+            <Text style={[styles.itemText, styles.itemText]}>Log Out</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -103,9 +103,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 15,
     fontWeight: '500',
-  },
-  logOutText: {
-    color: '#dc2626',
   },
   separator: {
     backgroundColor: '#f3f4f6',
