@@ -5,9 +5,9 @@ import * as Linking from 'expo-linking';
 
 import { useAuth } from '../context/AuthContext';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
-import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
+import { SignedInShell } from '../screens/SignedInShell';
 import { SignupScreen } from '../screens/SignupScreen';
 
 export type RootStackParamList = {
@@ -15,7 +15,7 @@ export type RootStackParamList = {
   Signup: undefined;
   ForgotPassword: undefined;
   ResetPassword: undefined;
-  Home: undefined;
+  App: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -27,7 +27,7 @@ const linking = {
       Signup: 'signup',
       ForgotPassword: 'forgot-password',
       ResetPassword: 'reset-password',
-      Home: 'home',
+      App: 'home',
     },
   },
 };
@@ -51,9 +51,9 @@ export const AppNavigator = () => {
       <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
         {user ? (
           <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{ title: 'Home' }}
+            name="App"
+            component={SignedInShell}
+            options={{ headerShown: false }}
           />
         ) : (
           <>

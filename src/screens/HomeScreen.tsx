@@ -1,95 +1,88 @@
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
 
 export const HomeScreen = () => {
-  const { signOut, user } = useAuth();
-  const [signingOut, setSigningOut] = useState(false);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-
-    try {
-      await signOut();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unable to sign out right now.';
-
-      Alert.alert('Sign out failed', message);
-    } finally {
-      setSigningOut(false);
-    }
-  };
+  const { user } = useAuth();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Home</Text>
-      <Text style={styles.subtitle}>You are signed in.</Text>
-      <Text style={styles.email}>{user?.email ?? 'No email available'}</Text>
-
-      <Pressable
-        disabled={signingOut}
-        onPress={handleSignOut}
-        style={({ pressed }) => [
-          styles.button,
-          pressed && !signingOut ? styles.buttonPressed : null,
-          signingOut ? styles.buttonDisabled : null,
-        ]}
-      >
-        {signingOut ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign Out</Text>
-        )}
-      </Pressable>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarIcon}>◉</Text>
+      </View>
+      <Text style={styles.title}>Profile</Text>
+      <Text style={styles.subtitle}>You are signed in to PawCult.</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Email</Text>
+        <Text style={styles.email}>{user?.email ?? 'No email available'}</Text>
+      </View>
+      <Text style={styles.helper}>
+        Profile details are a placeholder for now. Settings and sign out are available in the top menu.
+      </Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 24,
-    backgroundColor: '#fff',
+  },
+  avatar: {
+    alignItems: 'center',
+    backgroundColor: '#dcfce7',
+    borderRadius: 40,
+    height: 80,
+    justifyContent: 'center',
+    width: 80,
+  },
+  avatarIcon: {
+    color: '#16a34a',
+    fontSize: 40,
+    fontWeight: '700',
   },
   title: {
+    color: '#0f172a',
     fontSize: 30,
     fontWeight: '700',
-    color: '#0f172a',
+    marginTop: 16,
   },
   subtitle: {
-    marginTop: 8,
-    fontSize: 16,
     color: '#475569',
+    fontSize: 16,
+    marginTop: 8,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 24,
+    maxWidth: 360,
+    padding: 20,
+    width: '100%',
+  },
+  label: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   email: {
-    marginTop: 12,
-    fontSize: 16,
+    color: '#0f172a',
+    fontSize: 18,
     fontWeight: '500',
-    color: '#1e293b',
+    marginTop: 8,
   },
-  button: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 180,
-    minHeight: 52,
-    marginTop: 32,
-    borderRadius: 12,
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 24,
-  },
-  buttonPressed: {
-    opacity: 0.9,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+  helper: {
+    color: '#64748b',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 18,
+    maxWidth: 320,
+    textAlign: 'center',
   },
 });

@@ -64,7 +64,7 @@ export const ResetPasswordScreen = ({ navigation }: Props) => {
       Alert.alert('Password updated', 'Your password has been updated.', [
         {
           text: 'OK',
-          onPress: () => navigation.navigate('Home'),
+          onPress: () => navigation.navigate('App'),
         },
       ]);
     } catch (error) {
@@ -147,11 +147,11 @@ export const ResetPasswordScreen = ({ navigation }: Props) => {
 
             <Pressable
               disabled={submitting}
-              onPress={() => navigation.navigate(sessionReady ? 'Home' : 'Login')}
+              onPress={() => navigation.navigate(sessionReady ? 'App' : 'Login')}
               style={styles.secondaryButton}
             >
               <Text style={styles.secondaryButtonText}>
-                {sessionReady ? 'Back to home' : 'Back to sign in'}
+                {sessionReady ? 'Back to app' : 'Back to sign in'}
               </Text>
             </Pressable>
           </View>
