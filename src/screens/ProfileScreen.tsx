@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -16,16 +17,20 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const ProfileScreen = () => {
-  const { pets } = usePetProfiles();
+  const { pets, loading, error } = usePetProfiles();
   const navigation = useNavigation<NavigationProp>();
 
   const petSummary = useMemo(() => {
+    if (loading) {
+      return 'Loading pets...';
+    }
+
     if (pets.length === 0) {
       return 'No pets added yet';
     }
 
     return `${pets.length} ${pets.length === 1 ? 'pet' : 'pets'} on your profile`;
-  }, [pets.length]);
+  }, [loading, pets.length]);
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
@@ -41,7 +46,20 @@ export const ProfileScreen = () => {
         </View>
       </View>
 
-      {pets.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingCard}>
+          <ActivityIndicator color="#8b5cf6" size="large" />
+          <Text style={styles.loadingText}>Loading your pets...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.emptyCard}>
+          <View style={styles.emptyBadge}>
+            <Text style={styles.emptyBadgeIcon}>!</Text>
+          </View>
+          <Text style={styles.emptyTitle}>Could not load pets</Text>
+          <Text style={styles.emptyDescription}>{error}</Text>
+        </View>
+      ) : pets.length === 0 ? (
         <View style={styles.emptyCard}>
           <View style={styles.emptyBadge}>
             <Text style={styles.emptyBadgeIcon}>🐾</Text>
@@ -147,6 +165,21 @@ const styles = StyleSheet.create({
     color: '#6d28d9',
     fontSize: 13,
     fontWeight: '600',
+  },
+  loadingCard: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 28,
+  },
+  loadingText: {
+    color: '#64748b',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 12,
+    textAlign: 'center',
   },
   emptyCard: {
     alignItems: 'center',

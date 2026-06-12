@@ -13,4 +13,6 @@ export type CreateMobilePetInput = {
   breed: string;
   bio: string;
   profilePhotoUri: string | null;
+  profilePhotoBase64: string | null;
+  profilePhotoMimeType: string | null;
 };

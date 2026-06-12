@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MobileBottomNav, MobileTabKey } from '../components/MobileBottomNav';
 import { MobileTopNav } from '../components/MobileTopNav';
 import { MoreMenuModal } from '../components/MoreMenuModal';
+import { ParkRequestsModal } from '../components/ParkRequestsModal';
 import { PlaceholderModal } from '../components/PlaceholderModal';
 import { useAuth } from '../context/AuthContext';
 import { CheckInScreen } from './CheckInScreen';
@@ -17,6 +18,7 @@ export const SignedInShell = () => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<MobileTabKey>('check-in');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRequestsOpen, setIsRequestsOpen] = useState(false);
   const [placeholder, setPlaceholder] = useState<PlaceholderType>(null);
 
   const handleSignOut = async () => {
@@ -64,9 +66,15 @@ export const SignedInShell = () => {
       <MoreMenuModal
         onClose={() => setIsMenuOpen(false)}
         onLogOut={handleSignOut}
+        onOpenRequests={() => setIsRequestsOpen(true)}
         onOpenPlaceholder={setPlaceholder}
         topInset={insets.top}
         visible={isMenuOpen}
+      />
+
+      <ParkRequestsModal
+        onClose={() => setIsRequestsOpen(false)}
+        visible={isRequestsOpen}
       />
 
       <PlaceholderModal

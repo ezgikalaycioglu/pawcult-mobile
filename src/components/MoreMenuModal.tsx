@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 type MoreMenuModalProps = {
   onClose: () => void;
   onLogOut: () => Promise<void>;
+  onOpenRequests: () => void;
   onOpenPlaceholder: (type: 'settings' | 'contact') => void;
   topInset: number;
   visible: boolean;
@@ -11,6 +12,7 @@ type MoreMenuModalProps = {
 export const MoreMenuModal = ({
   onClose,
   onLogOut,
+  onOpenRequests,
   onOpenPlaceholder,
   topInset,
   visible,
@@ -27,6 +29,17 @@ export const MoreMenuModal = ({
           onPress={(event) => event.stopPropagation()}
           style={[styles.menu, { top: topInset + 60 }]}
         >
+          <Pressable
+            onPress={() => {
+              onClose();
+              onOpenRequests();
+            }}
+            style={({ pressed }) => [styles.item, pressed ? styles.itemPressed : null]}
+          >
+            <Text style={styles.itemIcon}>☰</Text>
+            <Text style={styles.itemText}>Requests</Text>
+          </Pressable>
+          <View style={styles.separator} />
           <Pressable
             onPress={() => {
               onClose();

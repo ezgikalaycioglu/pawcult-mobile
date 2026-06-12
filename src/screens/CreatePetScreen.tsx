@@ -24,19 +24,20 @@ const MAX_BREED_LENGTH = 100;
 const MAX_BIO_LENGTH = 500;
 
 export const CreatePetScreen = ({ navigation }: Props) => {
-  const { addPet } = usePetProfiles();
+  const { createPet, creating } = usePetProfiles();
   const [name, setName] = useState('');
   const [breed, setBreed] = useState('');
   const [bio, setBio] = useState('');
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
+  const [profilePhotoBase64, setProfilePhotoBase64] = useState<string | null>(null);
+  const [profilePhotoMimeType, setProfilePhotoMimeType] = useState<string | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   const trimmedName = name.trim();
   const trimmedBreed = breed.trim();
   const canSave = useMemo(
-    () => Boolean(trimmedName && trimmedBreed && !isPickingImage && !isSaving),
-    [isPickingImage, isSaving, trimmedBreed, trimmedName]
+    () => Boolean(trimmedName && trimmedBreed && !isPickingImage && !creating),
+    [isPickingImage, creating, trimmedBreed, trimmedName]
   );
 
   const handlePickImage = async () => {
@@ -55,38 +56,47 @@ export const CreatePetScreen = ({ navigation }: Props) => {
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [1, 1],
+        base64: true,
         mediaTypes: ['images'],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]?.uri) {
-        setProfilePhotoUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setProfilePhotoUri(asset.uri);
+        setProfilePhotoBase64(asset.base64 ?? null);
+        setProfilePhotoMimeType(asset.mimeType ?? 'image/jpeg');
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Photo selection failed', 'Please try choosing a photo again.');
     } finally {
       setIsPickingImage(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!trimmedName || !trimmedBreed) {
       Alert.alert('Missing information', 'Pet name and breed are required.');
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      addPet({
+      await createPet({
         bio,
         breed,
         name,
         profilePhotoUri,
+        profilePhotoBase64,
+        profilePhotoMimeType,
       });
       navigation.goBack();
-    } finally {
-      setIsSaving(false);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to create pet profile right now.';
+
+      Alert.alert('Save failed', message);
     }
   };
 
@@ -103,7 +113,7 @@ export const CreatePetScreen = ({ navigation }: Props) => {
           <View style={styles.headerCard}>
             <Text style={styles.headerTitle}>Create Pet Profile</Text>
             <Text style={styles.headerSubtitle}>
-              Add your pet to your mobile profile. You can connect this to Supabase later.
+              Add your pet to your mobile profile and save it to PawCult.
             </Text>
           </View>
 
@@ -186,7 +196,7 @@ export const CreatePetScreen = ({ navigation }: Props) => {
             ]}
           >
             <Text style={styles.saveButtonText}>
-              {isSaving ? 'Saving...' : 'Save Pet'}
+              {creating ? 'Saving...' : 'Save Pet'}
             </Text>
           </Pressable>
         </View>
@@ -348,8 +358,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#8b5cf6',
     borderRadius: 16,
-    minHeight: 56,
     justifyContent: 'center',
+    minHeight: 56,
   },
   saveButtonDisabled: {
     opacity: 0.5,
