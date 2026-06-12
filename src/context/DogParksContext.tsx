@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   ReactNode,
   useContext,
   useEffect,
@@ -9,8 +10,11 @@ import {
 
 import { supabase } from '../lib/supabase';
 import {
+  CreateDogParkCheckInInput,
   CreateDogParkInput,
   DogParkStatus,
+  MobileDogParkCheckIn,
+  MobileDogParkCheckInPet,
   MobileDogPark,
   MobileDogParkFavorite,
 } from '../types/dogParks';
@@ -18,12 +22,20 @@ import { useAuth } from './AuthContext';
 
 type DogParksContextType = {
   approvedParks: MobileDogPark[];
+  checkInPets: (input: CreateDogParkCheckInInput) => Promise<void>;
+  checkIns: MobileDogParkCheckIn[];
+  checkInsByParkId: Record<string, MobileDogParkCheckIn[]>;
+  checkInsLoading: boolean;
+  checkingIn: boolean;
+  checkingOutIds: string[];
+  checkOutCheckIns: (checkInIds: string[]) => Promise<void>;
   createDogPark: (input: CreateDogParkInput) => Promise<void>;
   creating: boolean;
   error: string | null;
   favoriteParkIds: string[];
   favoriteParks: MobileDogPark[];
   favoritingParkId: string | null;
+  fetchDogParkCheckIns: () => Promise<void>;
   fetchDogParks: () => Promise<void>;
   loading: boolean;
   parkRequests: MobileDogPark[];
@@ -46,6 +58,26 @@ type DogParkFavoriteRow = {
   created_at: string;
 };
 
+type DogParkCheckInPetRow = {
+  id: string;
+  name: string;
+  breed: string;
+  bio: string | null;
+  profile_photo_url: string | null;
+};
+
+type DogParkCheckInRow = {
+  id: string;
+  dog_park_id: string;
+  user_id: string;
+  pet_id: string;
+  starts_at: string;
+  ends_at: string;
+  checked_out_at: string | null;
+  created_at: string;
+  pet_profiles: DogParkCheckInPetRow | DogParkCheckInPetRow[] | null;
+};
+
 const DogParksContext = createContext<DogParksContextType | undefined>(undefined);
 
 const mapDogParkRow = (row: DogParkRow): MobileDogPark => ({
@@ -65,19 +97,103 @@ const mapDogParkFavoriteRow = (
   createdAt: row.created_at,
 });
 
+const getCheckInPet = (
+  petProfiles: DogParkCheckInRow['pet_profiles']
+): DogParkCheckInPetRow | null => {
+  if (Array.isArray(petProfiles)) {
+    return petProfiles[0] ?? null;
+  }
+
+  return petProfiles;
+};
+
+const mapDogParkCheckInRow = (row: DogParkCheckInRow): MobileDogParkCheckIn => {
+  const pet = getCheckInPet(row.pet_profiles);
+  const mappedPet: MobileDogParkCheckInPet | null = pet
+    ? {
+        id: pet.id,
+        name: pet.name,
+        breed: pet.breed,
+        bio: pet.bio,
+        profilePhotoUri: pet.profile_photo_url,
+      }
+    : null;
+
+  return {
+    id: row.id,
+    dogParkId: row.dog_park_id,
+    userId: row.user_id,
+    petId: row.pet_id,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    checkedOutAt: row.checked_out_at,
+    createdAt: row.created_at,
+    pet: mappedPet,
+  };
+};
+
 export const DogParksProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [parks, setParks] = useState<MobileDogPark[]>([]);
   const [favorites, setFavorites] = useState<MobileDogParkFavorite[]>([]);
+  const [checkIns, setCheckIns] = useState<MobileDogParkCheckIn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [checkInsLoading, setCheckInsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
   const [favoritingParkId, setFavoritingParkId] = useState<string | null>(null);
+  const [checkingOutIds, setCheckingOutIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDogParks = async () => {
+  const fetchDogParkCheckIns = useCallback(async () => {
+    if (!user?.id) {
+      setCheckIns([]);
+      return;
+    }
+
+    setCheckInsLoading(true);
+    setError(null);
+
+    try {
+      const now = new Date();
+      const futureCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const { data, error: fetchError } = await supabase
+        .from('dog_park_checkins')
+        .select(
+          'id, dog_park_id, user_id, pet_id, starts_at, ends_at, checked_out_at, created_at, pet_profiles(id, name, breed, bio, profile_photo_url)'
+        )
+        .is('checked_out_at', null)
+        .gt('ends_at', now.toISOString())
+        .lte('starts_at', futureCutoff.toISOString())
+        .order('starts_at', { ascending: true });
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      setCheckIns(
+        (data ?? []).map((row) =>
+          mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
+        )
+      );
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof Error
+          ? fetchError.message
+          : 'Unable to load dog park check-ins right now.';
+
+      setError(message);
+      setCheckIns([]);
+    } finally {
+      setCheckInsLoading(false);
+    }
+  }, [user?.id]);
+
+  const fetchDogParks = useCallback(async () => {
     if (!user?.id) {
       setParks([]);
       setFavorites([]);
+      setCheckIns([]);
       return;
     }
 
@@ -85,7 +201,9 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      const [parksResult, favoritesResult] = await Promise.all([
+      const now = new Date();
+      const futureCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const [parksResult, favoritesResult, checkInsResult] = await Promise.all([
         supabase
           .from('dog_parks')
           .select('id, name, latitude, longitude, status, created_by, created_at')
@@ -94,6 +212,15 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
           .from('dog_park_favorites')
           .select('dog_park_id, created_at')
           .order('created_at', { ascending: false }),
+        supabase
+          .from('dog_park_checkins')
+          .select(
+            'id, dog_park_id, user_id, pet_id, starts_at, ends_at, checked_out_at, created_at, pet_profiles(id, name, breed, bio, profile_photo_url)'
+          )
+          .is('checked_out_at', null)
+          .gt('ends_at', now.toISOString())
+          .lte('starts_at', futureCutoff.toISOString())
+          .order('starts_at', { ascending: true }),
       ]);
 
       if (parksResult.error) {
@@ -104,10 +231,19 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
         throw favoritesResult.error;
       }
 
+      if (checkInsResult.error) {
+        throw checkInsResult.error;
+      }
+
       setParks((parksResult.data ?? []).map((row) => mapDogParkRow(row as DogParkRow)));
       setFavorites(
         (favoritesResult.data ?? []).map((row) =>
           mapDogParkFavoriteRow(row as DogParkFavoriteRow)
+        )
+      );
+      setCheckIns(
+        (checkInsResult.data ?? []).map((row) =>
+          mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
         )
       );
     } catch (fetchError) {
@@ -119,24 +255,50 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       setError(message);
       setParks([]);
       setFavorites([]);
+      setCheckIns([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
       setParks([]);
       setFavorites([]);
+      setCheckIns([]);
       setError(null);
       setLoading(false);
+      setCheckInsLoading(false);
       setCreating(false);
+      setCheckingIn(false);
       setFavoritingParkId(null);
+      setCheckingOutIds([]);
       return;
     }
 
     void fetchDogParks();
-  }, [user?.id]);
+  }, [fetchDogParks, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const channel = supabase
+      .channel('dog-park-checkins')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dog_park_checkins' },
+        () => {
+          void fetchDogParkCheckIns();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchDogParkCheckIns, user?.id]);
 
   const createDogPark = async (input: CreateDogParkInput) => {
     if (!user?.id) {
@@ -198,6 +360,109 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     () => approvedParks.filter((park) => favoriteParkIds.includes(park.id)),
     [approvedParks, favoriteParkIds]
   );
+
+  const checkInsByParkId = useMemo(
+    () =>
+      checkIns.reduce<Record<string, MobileDogParkCheckIn[]>>((accumulator, checkIn) => {
+        const parkCheckIns = accumulator[checkIn.dogParkId] ?? [];
+        accumulator[checkIn.dogParkId] = [...parkCheckIns, checkIn];
+        return accumulator;
+      }, {}),
+    [checkIns]
+  );
+
+  const checkInPets = async (input: CreateDogParkCheckInInput) => {
+    if (!user?.id) {
+      throw new Error('User session is required to check in.');
+    }
+
+    const park = approvedParks.find((approvedPark) => approvedPark.id === input.dogParkId);
+    if (!park) {
+      throw new Error('Pets can only check in at approved dog parks.');
+    }
+
+    const uniquePetIds = [...new Set(input.petIds)];
+    if (uniquePetIds.length === 0) {
+      throw new Error('Choose at least one pet to check in.');
+    }
+
+    if (input.endsAt <= input.startsAt) {
+      throw new Error('Check-out time must be after check-in time.');
+    }
+
+    setCheckingIn(true);
+    setError(null);
+
+    try {
+      const rows = uniquePetIds.map((petId) => ({
+        dog_park_id: input.dogParkId,
+        ends_at: input.endsAt.toISOString(),
+        pet_id: petId,
+        starts_at: input.startsAt.toISOString(),
+        user_id: user.id,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('dog_park_checkins')
+        .insert(rows);
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      await fetchDogParkCheckIns();
+    } catch (checkInError) {
+      const message =
+        checkInError instanceof Error
+          ? checkInError.message
+          : 'Unable to check in right now.';
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const checkOutCheckIns = async (checkInIds: string[]) => {
+    if (!user?.id) {
+      throw new Error('User session is required to check out.');
+    }
+
+    const uniqueCheckInIds = [...new Set(checkInIds)];
+    if (uniqueCheckInIds.length === 0) {
+      return;
+    }
+
+    setCheckingOutIds(uniqueCheckInIds);
+    setError(null);
+
+    try {
+      const { error: updateError } = await supabase
+        .from('dog_park_checkins')
+        .update({ checked_out_at: new Date().toISOString() })
+        .in('id', uniqueCheckInIds)
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setCheckIns((currentCheckIns) =>
+        currentCheckIns.filter((checkIn) => !uniqueCheckInIds.includes(checkIn.id))
+      );
+    } catch (checkOutError) {
+      const message =
+        checkOutError instanceof Error
+          ? checkOutError.message
+          : 'Unable to check out right now.';
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setCheckingOutIds([]);
+    }
+  };
 
   const toggleFavoritePark = async (parkId: string) => {
     if (!user?.id) {
@@ -263,6 +528,11 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
   const value = useMemo<DogParksContextType>(
     () => ({
       approvedParks,
+      checkIns,
+      checkInsByParkId,
+      checkInsLoading,
+      checkingIn,
+      checkingOutIds,
       parks,
       parkRequests,
       favoriteParkIds,
@@ -272,11 +542,19 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       favoritingParkId,
       error,
       fetchDogParks,
+      fetchDogParkCheckIns,
       createDogPark,
+      checkInPets,
+      checkOutCheckIns,
       toggleFavoritePark,
     }),
     [
       approvedParks,
+      checkIns,
+      checkInsByParkId,
+      checkInsLoading,
+      checkingIn,
+      checkingOutIds,
       parks,
       parkRequests,
       favoriteParkIds,
@@ -285,6 +563,8 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       creating,
       favoritingParkId,
       error,
+      fetchDogParks,
+      fetchDogParkCheckIns,
     ]
   );
 

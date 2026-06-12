@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -12,7 +13,9 @@ import {
 } from 'react-native';
 import MapView, { MapPressEvent, Marker, Region } from 'react-native-maps';
 
+import { useAuth } from '../context/AuthContext';
 import { useDogParks } from '../context/DogParksContext';
+import { usePetProfiles } from '../context/PetProfilesContext';
 import { MobileDogPark } from '../types/dogParks';
 
 const STOCKHOLM_REGION: Region = {
@@ -24,11 +27,25 @@ const STOCKHOLM_REGION: Region = {
 
 const FOCUSED_PARK_DELTA = 0.025;
 const MAX_PARK_NAME_LENGTH = 100;
+const CHECK_IN_HOURS = [1, 2, 3];
+
+const formatTime = (isoDate: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(isoDate));
 
 export const CheckInScreen = () => {
   const mapRef = useRef<MapView | null>(null);
+  const { user } = useAuth();
+  const { pets } = usePetProfiles();
   const {
     approvedParks,
+    checkInPets,
+    checkInsByParkId,
+    checkingIn,
+    checkingOutIds,
+    checkOutCheckIns,
     createDogPark,
     creating,
     error,
@@ -46,6 +63,29 @@ export const CheckInScreen = () => {
   } | null>(null);
   const [parkName, setParkName] = useState('');
   const [selectedPark, setSelectedPark] = useState<MobileDogPark | null>(null);
+  const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
+  const [selectedHours, setSelectedHours] = useState(1);
+
+  const selectedParkCheckIns = selectedPark
+    ? checkInsByParkId[selectedPark.id] ?? []
+    : [];
+
+  const userCheckInIds = useMemo(() => {
+    if (!user?.id || !selectedPark) {
+      return [];
+    }
+
+    return selectedParkCheckIns
+      .filter((checkIn) => checkIn.userId === user.id)
+      .map((checkIn) => checkIn.id);
+  }, [selectedPark, selectedParkCheckIns, user?.id]);
+
+  const selectedParkIsFavorite = selectedPark
+    ? favoriteParkIds.includes(selectedPark.id)
+    : false;
+  const checkingOutSelectedPark = userCheckInIds.some((checkInId) =>
+    checkingOutIds.includes(checkInId)
+  );
 
   const handleMapPress = (event: MapPressEvent) => {
     if (!isAddingPark) {
@@ -59,6 +99,12 @@ export const CheckInScreen = () => {
     setDraftCoordinate(null);
     setIsAddingPark(false);
     setParkName('');
+  };
+
+  const resetSelectedPark = () => {
+    setSelectedPark(null);
+    setSelectedPetIds([]);
+    setSelectedHours(1);
   };
 
   const focusPark = (park: MobileDogPark) => {
@@ -126,6 +172,63 @@ export const CheckInScreen = () => {
     }
   };
 
+  const togglePet = (petId: string) => {
+    setSelectedPetIds((currentPetIds) =>
+      currentPetIds.includes(petId)
+        ? currentPetIds.filter((currentPetId) => currentPetId !== petId)
+        : [...currentPetIds, petId]
+    );
+  };
+
+  const handleCheckIn = async () => {
+    if (!selectedPark) {
+      return;
+    }
+
+    if (pets.length === 0) {
+      Alert.alert('Add a pet first', 'Create a pet profile before checking in.');
+      return;
+    }
+
+    if (selectedPetIds.length === 0) {
+      Alert.alert('Choose pets', 'Select at least one pet to check in.');
+      return;
+    }
+
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt.getTime() + selectedHours * 60 * 60 * 1000);
+
+    try {
+      await checkInPets({
+        dogParkId: selectedPark.id,
+        petIds: selectedPetIds,
+        startsAt,
+        endsAt,
+      });
+      setSelectedPetIds([]);
+    } catch (checkInError) {
+      const message =
+        checkInError instanceof Error
+          ? checkInError.message
+          : 'Unable to check in right now.';
+
+      Alert.alert('Check-in failed', message);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    try {
+      await checkOutCheckIns(userCheckInIds);
+    } catch (checkOutError) {
+      const message =
+        checkOutError instanceof Error
+          ? checkOutError.message
+          : 'Unable to check out right now.';
+
+      Alert.alert('Check-out failed', message);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <MapView
@@ -136,6 +239,7 @@ export const CheckInScreen = () => {
       >
         {approvedParks.map((park) => {
           const isFavorite = favoriteParkIds.includes(park.id);
+          const activeCheckIns = checkInsByParkId[park.id]?.length ?? 0;
 
           return (
             <Marker
@@ -150,15 +254,17 @@ export const CheckInScreen = () => {
               }}
               pinColor={isFavorite ? '#ef4444' : '#8b5cf6'}
             >
-              {isFavorite ? (
-                <View style={styles.favoriteMarker}>
-                  <Text style={styles.favoriteMarkerText}>♥</Text>
-                </View>
-              ) : (
-                <View style={styles.parkMarker}>
-                  <Text style={styles.parkMarkerText}>•</Text>
-                </View>
-              )}
+              <View
+                style={[
+                  styles.parkMarker,
+                  isFavorite ? styles.favoriteMarker : null,
+                  activeCheckIns > 0 ? styles.activeMarker : null,
+                ]}
+              >
+                <Text style={styles.parkMarkerText}>
+                  {activeCheckIns > 0 ? activeCheckIns : isFavorite ? '♥' : '•'}
+                </Text>
+              </View>
             </Marker>
           );
         })}
@@ -321,52 +427,158 @@ export const CheckInScreen = () => {
 
       <Modal
         animationType="slide"
-        onRequestClose={() => setSelectedPark(null)}
+        onRequestClose={resetSelectedPark}
         transparent
         visible={selectedPark !== null}
       >
-        <Pressable
-          onPress={() => setSelectedPark(null)}
-          style={styles.modalBackdrop}
-        >
+        <Pressable onPress={resetSelectedPark} style={styles.modalBackdrop}>
           <Pressable
             onPress={(event) => event.stopPropagation()}
             style={styles.modalCard}
           >
             <Text style={styles.modalTitle}>{selectedPark?.name}</Text>
             <Text style={styles.modalDescription}>
-              {selectedPark && favoriteParkIds.includes(selectedPark.id)
-                ? 'This park is saved in your favorites.'
-                : 'Save this park to your favorites for quick access.'}
+              {selectedParkCheckIns.length === 0
+                ? 'No pets are checked in here right now.'
+                : `${selectedParkCheckIns.length} ${selectedParkCheckIns.length === 1 ? 'pet is' : 'pets are'} checked in here.`}
             </Text>
+
+            {selectedParkCheckIns.length > 0 ? (
+              <View style={styles.checkInList}>
+                {selectedParkCheckIns.map((checkIn) => (
+                  <View key={checkIn.id} style={styles.checkInRow}>
+                    {checkIn.pet?.profilePhotoUri ? (
+                      <Image
+                        source={{ uri: checkIn.pet.profilePhotoUri }}
+                        style={styles.checkInPetImage}
+                      />
+                    ) : (
+                      <View style={styles.checkInPetPlaceholder}>
+                        <Text style={styles.checkInPetPlaceholderText}>•</Text>
+                      </View>
+                    )}
+                    <View style={styles.checkInPetBody}>
+                      <Text style={styles.checkInPetName}>
+                        {checkIn.pet?.name ?? 'A pet'}
+                      </Text>
+                      <Text style={styles.checkInTime}>
+                        Until {formatTime(checkIn.endsAt)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Check in</Text>
+              <View style={styles.durationPicker}>
+                {CHECK_IN_HOURS.map((hours) => (
+                  <Pressable
+                    key={hours}
+                    onPress={() => setSelectedHours(hours)}
+                    style={[
+                      styles.durationButton,
+                      selectedHours === hours ? styles.durationButtonActive : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationButtonText,
+                        selectedHours === hours ? styles.durationButtonTextActive : null,
+                      ]}
+                    >
+                      {hours}h
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {pets.length === 0 ? (
+              <Text style={styles.emptyPetsText}>
+                Add a pet profile before checking in.
+              </Text>
+            ) : (
+              <ScrollView
+                contentContainerStyle={styles.petChoicesContent}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.petChoices}
+              >
+                {pets.map((pet) => {
+                  const selected = selectedPetIds.includes(pet.id);
+
+                  return (
+                    <Pressable
+                      key={pet.id}
+                      onPress={() => togglePet(pet.id)}
+                      style={[
+                        styles.petChoice,
+                        selected ? styles.petChoiceSelected : null,
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.petChoiceText,
+                          selected ? styles.petChoiceTextSelected : null,
+                        ]}
+                      >
+                        {pet.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
             <View style={styles.modalActions}>
               <Pressable
                 disabled={favoritingParkId !== null}
-                onPress={() => setSelectedPark(null)}
+                onPress={handleToggleFavorite}
                 style={({ pressed }) => [
                   styles.modalCancelButton,
                   pressed ? styles.buttonPressed : null,
                 ]}
               >
-                <Text style={styles.modalCancelButtonText}>Close</Text>
-              </Pressable>
-              <Pressable
-                disabled={favoritingParkId !== null}
-                onPress={handleToggleFavorite}
-                style={({ pressed }) => [
-                  styles.modalSubmitButton,
-                  favoritingParkId !== null ? styles.buttonDisabled : null,
-                  pressed && favoritingParkId === null ? styles.buttonPressed : null,
-                ]}
-              >
-                <Text style={styles.modalSubmitButtonText}>
+                <Text style={styles.modalCancelButtonText}>
                   {favoritingParkId === selectedPark?.id
                     ? 'Saving...'
-                    : selectedPark && favoriteParkIds.includes(selectedPark.id)
-                      ? 'Remove Favorite'
-                      : 'Save Favorite'}
+                    : selectedParkIsFavorite
+                      ? 'Unsave'
+                      : 'Save'}
                 </Text>
               </Pressable>
+              {userCheckInIds.length > 0 ? (
+                <Pressable
+                  disabled={checkingOutSelectedPark}
+                  onPress={handleCheckOut}
+                  style={({ pressed }) => [
+                    styles.modalSubmitButton,
+                    checkingOutSelectedPark ? styles.buttonDisabled : null,
+                    pressed && !checkingOutSelectedPark ? styles.buttonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.modalSubmitButtonText}>
+                    {checkingOutSelectedPark ? 'Checking out...' : 'Check Out'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  disabled={checkingIn}
+                  onPress={handleCheckIn}
+                  style={({ pressed }) => [
+                    styles.modalSubmitButton,
+                    checkingIn ? styles.buttonDisabled : null,
+                    pressed && !checkingIn ? styles.buttonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.modalSubmitButtonText}>
+                    {checkingIn ? 'Checking in...' : 'Check In'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </Pressable>
         </Pressable>
@@ -393,36 +605,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 32,
   },
+  favoriteMarker: {
+    backgroundColor: '#ef4444',
+  },
+  activeMarker: {
+    backgroundColor: '#0f766e',
+  },
   parkMarkerText: {
     color: '#ffffff',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
-    lineHeight: 24,
-  },
-  favoriteMarker: {
-    alignItems: 'center',
-    backgroundColor: '#ef4444',
-    borderColor: '#ffffff',
-    borderRadius: 18,
-    borderWidth: 2,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  favoriteMarkerText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   topControls: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 10,
+    justifyContent: 'space-between',
     left: 14,
     position: 'absolute',
     right: 14,
-    justifyContent: 'space-between',
     top: 14,
   },
   refreshButton: {
@@ -611,6 +813,119 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 12,
     marginTop: 8,
+  },
+  checkInList: {
+    gap: 10,
+    marginTop: 16,
+  },
+  checkInRow: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 10,
+  },
+  checkInPetImage: {
+    borderRadius: 22,
+    height: 44,
+    width: 44,
+  },
+  checkInPetPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#ede9fe',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  checkInPetPlaceholderText: {
+    color: '#8b5cf6',
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  checkInPetBody: {
+    flex: 1,
+  },
+  checkInPetName: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  checkInTime: {
+    color: '#64748b',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
+  sectionTitle: {
+    color: '#0f172a',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  durationPicker: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 4,
+    padding: 4,
+  },
+  durationButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  durationButtonActive: {
+    backgroundColor: '#8b5cf6',
+  },
+  durationButtonText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  durationButtonTextActive: {
+    color: '#ffffff',
+  },
+  emptyPetsText: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 12,
+  },
+  petChoices: {
+    marginTop: 12,
+  },
+  petChoicesContent: {
+    gap: 8,
+  },
+  petChoice: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#cbd5e1',
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: 160,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  petChoiceSelected: {
+    backgroundColor: '#f5f3ff',
+    borderColor: '#8b5cf6',
+  },
+  petChoiceText: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  petChoiceTextSelected: {
+    color: '#6d28d9',
   },
   modalActions: {
     flexDirection: 'row',
