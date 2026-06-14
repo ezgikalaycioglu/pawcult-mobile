@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase';
 import {
   CreateDogParkCheckInInput,
   CreateDogParkInput,
+  DogParkCheckInStatus,
   DogParkStatus,
   MobileDogParkCheckIn,
   MobileDogParkCheckInPet,
@@ -27,7 +28,10 @@ type DogParksContextType = {
   checkInsByParkId: Record<string, MobileDogParkCheckIn[]>;
   checkInsLoading: boolean;
   checkingIn: boolean;
+  cancellingCheckInIds: string[];
   checkingOutIds: string[];
+  scheduledCheckInsByParkId: Record<string, MobileDogParkCheckIn[]>;
+  cancelScheduledCheckIns: (checkInIds: string[]) => Promise<void>;
   checkOutCheckIns: (checkInIds: string[]) => Promise<void>;
   createDogPark: (input: CreateDogParkInput) => Promise<void>;
   creating: boolean;
@@ -79,6 +83,29 @@ type DogParkCheckInRow = {
 };
 
 const DogParksContext = createContext<DogParksContextType | undefined>(undefined);
+const CHECK_IN_NOW_STATUS_GRACE_MS = 5000;
+
+const getCheckInStatus = (
+  checkIn: Pick<MobileDogParkCheckIn, 'startsAt' | 'endsAt' | 'checkedOutAt'>,
+  nowMs = Date.now()
+): DogParkCheckInStatus => {
+  if (checkIn.checkedOutAt) {
+    return 'expired';
+  }
+
+  const startsAtMs = new Date(checkIn.startsAt).getTime();
+  const endsAtMs = new Date(checkIn.endsAt).getTime();
+
+  if (endsAtMs <= nowMs) {
+    return 'expired';
+  }
+
+  if (startsAtMs - nowMs > CHECK_IN_NOW_STATUS_GRACE_MS) {
+    return 'scheduled';
+  }
+
+  return 'active';
+};
 
 const mapDogParkRow = (row: DogParkRow): MobileDogPark => ({
   id: row.id,
@@ -128,6 +155,11 @@ const mapDogParkCheckInRow = (row: DogParkCheckInRow): MobileDogParkCheckIn => {
     endsAt: row.ends_at,
     checkedOutAt: row.checked_out_at,
     createdAt: row.created_at,
+    status: getCheckInStatus({
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      checkedOutAt: row.checked_out_at,
+    }),
     pet: mappedPet,
   };
 };
@@ -143,6 +175,8 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
   const [checkingIn, setCheckingIn] = useState(false);
   const [favoritingParkId, setFavoritingParkId] = useState<string | null>(null);
   const [checkingOutIds, setCheckingOutIds] = useState<string[]>([]);
+  const [cancellingCheckInIds, setCancellingCheckInIds] = useState<string[]>([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
 
   const fetchDogParkCheckIns = useCallback(async () => {
@@ -176,6 +210,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
           mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
         )
       );
+      setNowMs(Date.now());
     } catch (fetchError) {
       const message =
         fetchError instanceof Error
@@ -246,6 +281,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
           mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
         )
       );
+      setNowMs(Date.now());
     } catch (fetchError) {
       const message =
         fetchError instanceof Error
@@ -273,11 +309,22 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       setCheckingIn(false);
       setFavoritingParkId(null);
       setCheckingOutIds([]);
+      setCancellingCheckInIds([]);
       return;
     }
 
     void fetchDogParks();
   }, [fetchDogParks, user?.id]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -361,14 +408,39 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     [approvedParks, favoriteParkIds]
   );
 
+  const checkInsWithStatuses = useMemo(
+    () =>
+      checkIns
+        .map((checkIn) => ({
+          ...checkIn,
+          status: getCheckInStatus(checkIn, nowMs),
+        }))
+        .filter((checkIn) => checkIn.status !== 'expired'),
+    [checkIns, nowMs]
+  );
+
   const checkInsByParkId = useMemo(
     () =>
-      checkIns.reduce<Record<string, MobileDogParkCheckIn[]>>((accumulator, checkIn) => {
-        const parkCheckIns = accumulator[checkIn.dogParkId] ?? [];
-        accumulator[checkIn.dogParkId] = [...parkCheckIns, checkIn];
-        return accumulator;
-      }, {}),
-    [checkIns]
+      checkInsWithStatuses
+        .filter((checkIn) => checkIn.status === 'active')
+        .reduce<Record<string, MobileDogParkCheckIn[]>>((accumulator, checkIn) => {
+          const parkCheckIns = accumulator[checkIn.dogParkId] ?? [];
+          accumulator[checkIn.dogParkId] = [...parkCheckIns, checkIn];
+          return accumulator;
+        }, {}),
+    [checkInsWithStatuses]
+  );
+
+  const scheduledCheckInsByParkId = useMemo(
+    () =>
+      checkInsWithStatuses
+        .filter((checkIn) => checkIn.status === 'scheduled')
+        .reduce<Record<string, MobileDogParkCheckIn[]>>((accumulator, checkIn) => {
+          const parkCheckIns = accumulator[checkIn.dogParkId] ?? [];
+          accumulator[checkIn.dogParkId] = [...parkCheckIns, checkIn];
+          return accumulator;
+        }, {}),
+    [checkInsWithStatuses]
   );
 
   const checkInPets = async (input: CreateDogParkCheckInInput) => {
@@ -392,6 +464,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
 
     setCheckingIn(true);
     setError(null);
+    setNowMs(Date.now());
 
     try {
       const rows = uniquePetIds.map((petId) => ({
@@ -438,18 +511,26 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      const { error: updateError } = await supabase
+      const { data, error: updateError } = await supabase
         .from('dog_park_checkins')
         .update({ checked_out_at: new Date().toISOString() })
         .in('id', uniqueCheckInIds)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .is('checked_out_at', null)
+        .lte('starts_at', new Date().toISOString())
+        .select('id');
 
       if (updateError) {
         throw updateError;
       }
 
+      const checkedOutIds = (data ?? []).map((row) => row.id);
+      if (checkedOutIds.length === 0) {
+        throw new Error('Unable to check out right now.');
+      }
+
       setCheckIns((currentCheckIns) =>
-        currentCheckIns.filter((checkIn) => !uniqueCheckInIds.includes(checkIn.id))
+        currentCheckIns.filter((checkIn) => !checkedOutIds.includes(checkIn.id))
       );
     } catch (checkOutError) {
       const message =
@@ -461,6 +542,54 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       throw new Error(message);
     } finally {
       setCheckingOutIds([]);
+    }
+  };
+
+  const cancelScheduledCheckIns = async (checkInIds: string[]) => {
+    if (!user?.id) {
+      throw new Error('User session is required to cancel a scheduled check-in.');
+    }
+
+    const uniqueCheckInIds = [...new Set(checkInIds)];
+    if (uniqueCheckInIds.length === 0) {
+      return;
+    }
+
+    setCancellingCheckInIds(uniqueCheckInIds);
+    setError(null);
+
+    try {
+      const { data, error: deleteError } = await supabase
+        .from('dog_park_checkins')
+        .delete()
+        .in('id', uniqueCheckInIds)
+        .eq('user_id', user.id)
+        .is('checked_out_at', null)
+        .gt('starts_at', new Date().toISOString())
+        .select('id');
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      const cancelledIds = (data ?? []).map((row) => row.id);
+      if (cancelledIds.length === 0) {
+        throw new Error('Could not cancel scheduled check-in. Please try again.');
+      }
+
+      setCheckIns((currentCheckIns) =>
+        currentCheckIns.filter((checkIn) => !cancelledIds.includes(checkIn.id))
+      );
+    } catch (cancelError) {
+      const message =
+        cancelError instanceof Error
+          ? cancelError.message
+          : 'Could not cancel scheduled check-in. Please try again.';
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setCancellingCheckInIds([]);
     }
   };
 
@@ -532,7 +661,9 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       checkInsByParkId,
       checkInsLoading,
       checkingIn,
+      cancellingCheckInIds,
       checkingOutIds,
+      scheduledCheckInsByParkId,
       parks,
       parkRequests,
       favoriteParkIds,
@@ -545,6 +676,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       fetchDogParkCheckIns,
       createDogPark,
       checkInPets,
+      cancelScheduledCheckIns,
       checkOutCheckIns,
       toggleFavoritePark,
     }),
@@ -554,7 +686,9 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
       checkInsByParkId,
       checkInsLoading,
       checkingIn,
+      cancellingCheckInIds,
       checkingOutIds,
+      scheduledCheckInsByParkId,
       parks,
       parkRequests,
       favoriteParkIds,

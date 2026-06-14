@@ -1,4 +1,5 @@
 export type DogParkStatus = 'pending' | 'approved' | 'rejected';
+export type DogParkCheckInStatus = 'active' | 'scheduled' | 'expired';
 
 export type MobileDogPark = {
   id: string;
@@ -38,6 +39,7 @@ export type MobileDogParkCheckIn = {
   endsAt: string;
   checkedOutAt: string | null;
   createdAt: string;
+  status: DogParkCheckInStatus;
   pet: MobileDogParkCheckInPet | null;
 };
 
