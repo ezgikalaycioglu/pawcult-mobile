@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import * as Linking from 'expo-linking';
+import * as SecureStore from 'expo-secure-store';
 import { Session, User } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
@@ -15,17 +16,21 @@ import { parseSupabaseAuthRedirect } from '../utils/authRedirect';
 type AuthContextType = {
   user: User | null;
   session: Session | null;
+  pendingInviteToken: string | null;
   loading: boolean;
   recoveryLoading: boolean;
   recoveryError: string | null;
   isRecoverySession: boolean;
   clearRecoveryError: () => void;
+  clearPendingInviteToken: () => Promise<void>;
+  storePendingInviteToken: (token: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const PENDING_INVITE_TOKEN_KEY = 'pawcult.pendingInviteToken';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -34,6 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [isRecoverySession, setIsRecoverySession] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -106,9 +112,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const initializeAuth = async () => {
       try {
-        const [sessionResult, initialUrl] = await Promise.all([
+        const [sessionResult, initialUrl, storedInviteToken] = await Promise.all([
           supabase.auth.getSession(),
           Linking.getInitialURL(),
+          SecureStore.getItemAsync(PENDING_INVITE_TOKEN_KEY),
         ]);
 
         const { data, error } = sessionResult;
@@ -123,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setSession(data.session);
         setUser(data.session?.user ?? null);
+        setPendingInviteToken(storedInviteToken);
         await handleAuthRedirect(initialUrl);
       } finally {
         if (isMounted) {
@@ -164,11 +172,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       user,
       session,
+      pendingInviteToken,
       loading,
       recoveryLoading,
       recoveryError,
       isRecoverySession,
       clearRecoveryError: () => setRecoveryError(null),
+      clearPendingInviteToken: async () => {
+        await SecureStore.deleteItemAsync(PENDING_INVITE_TOKEN_KEY);
+        setPendingInviteToken(null);
+      },
+      storePendingInviteToken: async (token: string) => {
+        await SecureStore.setItemAsync(PENDING_INVITE_TOKEN_KEY, token);
+        setPendingInviteToken(token);
+      },
       signIn: async (email: string, password: string) => {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -201,7 +218,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsRecoverySession(false);
       },
     }),
-    [isRecoverySession, loading, recoveryError, recoveryLoading, session, user]
+    [
+      isRecoverySession,
+      loading,
+      pendingInviteToken,
+      recoveryError,
+      recoveryLoading,
+      session,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

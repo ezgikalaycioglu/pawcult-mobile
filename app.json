@@ -14,6 +14,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "associatedDomains": [
+        "applinks:pawcult.app"
+      ],
       "supportsTablet": true
     },
     "android": {
@@ -22,6 +25,23 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "pawcult.app",
+              "pathPrefix": "/invite"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {

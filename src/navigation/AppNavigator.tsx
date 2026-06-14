@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { CreatePetScreen } from '../screens/CreatePetScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { PetOwnerInviteScreen } from '../screens/PetOwnerInviteScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { SignedInShell } from '../screens/SignedInShell';
 import { SignupScreen } from '../screens/SignupScreen';
@@ -18,11 +19,12 @@ export type RootStackParamList = {
   ResetPassword: undefined;
   App: undefined;
   CreatePet: undefined;
+  Invite: { token: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const linking = {
-  prefixes: [Linking.createURL('/'), 'pawcult://'],
+  prefixes: [Linking.createURL('/'), 'pawcult://', 'https://pawcult.app'],
   config: {
     screens: {
       Login: 'login',
@@ -31,6 +33,7 @@ const linking = {
       ResetPassword: 'reset-password',
       App: 'home',
       CreatePet: 'pets/create',
+      Invite: 'invite/:token',
     },
   },
 };
@@ -43,7 +46,7 @@ const AuthLoadingScreen = () => (
 );
 
 export const AppNavigator = () => {
-  const { loading, user } = useAuth();
+  const { loading, pendingInviteToken, user } = useAuth();
 
   if (loading) {
     return <AuthLoadingScreen />;
@@ -52,7 +55,10 @@ export const AppNavigator = () => {
   if (user) {
     return (
       <NavigationContainer linking={linking}>
-        <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
+        <Stack.Navigator
+          initialRouteName={pendingInviteToken ? 'Invite' : 'App'}
+          screenOptions={{ headerBackTitle: 'Back' }}
+        >
           <Stack.Screen
             name="App"
             component={SignedInShell}
@@ -74,6 +80,20 @@ export const AppNavigator = () => {
             component={ResetPasswordScreen}
             options={{ title: 'Reset Password' }}
           />
+          <Stack.Screen
+            name="Invite"
+            component={PetOwnerInviteScreen}
+            initialParams={
+              pendingInviteToken ? { token: pendingInviteToken } : undefined
+            }
+            options={{
+              title: 'Pet Invite',
+              headerShadowVisible: false,
+              headerStyle: { backgroundColor: '#f8fafc' },
+              headerTintColor: '#8b5cf6',
+              headerTitleStyle: { color: '#0f172a', fontWeight: '700' },
+            }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     );
@@ -81,7 +101,15 @@ export const AppNavigator = () => {
 
   return (
     <NavigationContainer linking={linking}>
-      <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
+      <Stack.Navigator
+        initialRouteName="Login"
+        screenOptions={{ headerBackTitle: 'Back' }}
+      >
+        <Stack.Screen
+          name="Invite"
+          component={PetOwnerInviteScreen}
+          options={{ title: 'Pet Invite' }}
+        />
         <Stack.Screen
           name="Login"
           component={LoginScreen}

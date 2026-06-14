@@ -1,11 +1,14 @@
 export type MobilePetProfile = {
   id: string;
   userId: string;
+  createdByUserId: string | null;
   name: string;
   breed: string;
   bio: string | null;
   profilePhotoUri: string | null;
   createdAt: string;
+  activeOwnerCount: number;
+  isShared: boolean;
 };
 
 export type CreateMobilePetInput = {
@@ -15,4 +18,19 @@ export type CreateMobilePetInput = {
   profilePhotoUri: string | null;
   profilePhotoBase64: string | null;
   profilePhotoMimeType: string | null;
+};
+
+export type PetOwnerInvite = {
+  id: string;
+  token: string;
+  invitedEmail: string;
+  expiresAt: string;
+};
+
+export type PetOwnerInvitePreview = {
+  petName: string;
+  inviterDisplayName: string | null;
+  invitedEmail: string;
+  expiresAt: string;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
 };
