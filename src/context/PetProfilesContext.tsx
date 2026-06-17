@@ -13,6 +13,8 @@ import {
   MobilePetProfile,
   PetOwnerInvite,
   PetOwnerInvitePreview,
+  PetOwnerSummary,
+  UpdateMobilePetInput,
 } from '../types/pets';
 import { useAuth } from './AuthContext';
 
@@ -23,10 +25,12 @@ type PetProfilesContextType = {
   creating: boolean;
   error: string | null;
   fetchPets: () => Promise<void>;
+  getPetOwners: (petId: string) => Promise<PetOwnerSummary[]>;
   getPetOwnerInvitePreview: (token: string) => Promise<PetOwnerInvitePreview>;
   loading: boolean;
   pets: MobilePetProfile[];
   resetPets: () => void;
+  updatePet: (petId: string, input: UpdateMobilePetInput) => Promise<MobilePetProfile>;
 };
 
 type PetProfileRow = {
@@ -61,6 +65,17 @@ type PetOwnerInvitePreviewRow = {
   invited_email: string;
   expires_at: string;
   status: PetOwnerInvitePreview['status'];
+};
+
+type PetOwnerSummaryRow = {
+  id: string;
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role: PetOwnerSummary['role'];
+  status: PetOwnerSummary['status'];
+  accepted_at: string | null;
+  is_current_user: boolean;
 };
 
 const PetProfilesContext = createContext<PetProfilesContextType | undefined>(undefined);
@@ -118,6 +133,17 @@ const mapInvitePreviewRow = (
   invitedEmail: row.invited_email,
   expiresAt: row.expires_at,
   status: row.status,
+});
+
+const mapOwnerSummaryRow = (row: PetOwnerSummaryRow): PetOwnerSummary => ({
+  id: row.id,
+  userId: row.user_id,
+  displayName: row.display_name,
+  email: row.email,
+  role: row.role,
+  status: row.status,
+  acceptedAt: row.accepted_at,
+  isCurrentUser: row.is_current_user,
 });
 
 const getFileExtension = (uri: string, mimeType: string | null) => {
@@ -340,6 +366,43 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updatePet = async (
+    petId: string,
+    input: UpdateMobilePetInput
+  ): Promise<MobilePetProfile> => {
+    if (!user?.id) {
+      throw new Error('User session is required to update a pet profile.');
+    }
+
+    const { data, error: updateError } = await supabase
+      .from('pet_profiles')
+      .update({
+        bio: input.bio.trim() ? input.bio.trim() : null,
+        breed: input.breed.trim(),
+        name: input.name.trim(),
+      })
+      .eq('id', petId)
+      .select(
+        'id, user_id, created_by_user_id, name, breed, bio, profile_photo_url, created_at'
+      )
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    const currentPet = pets.find((pet) => pet.id === petId);
+    const updatedPet = mapPetRow(data as PetProfileRow, {
+      [petId]: currentPet?.activeOwnerCount ?? 1,
+    });
+
+    setPets((currentPets) =>
+      currentPets.map((pet) => (pet.id === petId ? updatedPet : pet))
+    );
+
+    return updatedPet;
+  };
+
   const createPetOwnerInvite = async (
     petId: string,
     invitedEmail: string
@@ -392,6 +455,25 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
     return mapInvitePreviewRow(row);
   };
 
+  const getPetOwners = async (petId: string): Promise<PetOwnerSummary[]> => {
+    if (!user?.id) {
+      throw new Error('User session is required to view pet parents.');
+    }
+
+    const { data, error: ownersError } = await supabase.rpc(
+      'get_pet_owner_summaries',
+      {
+        pet_id: petId,
+      }
+    );
+
+    if (ownersError) {
+      throw ownersError;
+    }
+
+    return ((data ?? []) as PetOwnerSummaryRow[]).map(mapOwnerSummaryRow);
+  };
+
   const acceptPetOwnerInvite = async (token: string): Promise<string> => {
     if (!user?.id) {
       throw new Error('User session is required to accept this invite.');
@@ -420,8 +502,10 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
       error,
       fetchPets,
       createPet,
+      updatePet,
       createPetOwnerInvite,
       getPetOwnerInvitePreview,
+      getPetOwners,
       acceptPetOwnerInvite,
       resetPets,
     }),

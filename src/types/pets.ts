@@ -20,6 +20,23 @@ export type CreateMobilePetInput = {
   profilePhotoMimeType: string | null;
 };
 
+export type UpdateMobilePetInput = {
+  name: string;
+  breed: string;
+  bio: string;
+};
+
+export type PetOwnerSummary = {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string | null;
+  role: 'owner' | 'caregiver';
+  status: 'active' | 'invited' | 'removed';
+  acceptedAt: string | null;
+  isCurrentUser: boolean;
+};
+
 export type PetOwnerInvite = {
   id: string;
   token: string;

@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(17);
+SELECT plan(19);
 
 create temp table test_ids (
   key text primary key,
@@ -329,6 +329,17 @@ select pg_temp.authenticate_as(
   'ezgi@example.test'
 );
 
+select is(
+  (
+    select count(*)::int
+    from public.get_pet_owner_summaries(
+      (select id from test_ids where key = 'robiko')
+    )
+  ),
+  3,
+  'active owner can view all active pet parents'
+);
+
 select lives_ok(
   $$
     insert into public.dog_park_checkins (
@@ -415,6 +426,18 @@ select is(
   ),
   0,
   'non-owner cannot see a private pet profile'
+);
+
+select throws_ok(
+  $$
+    select *
+    from public.get_pet_owner_summaries(
+      '00000000-0000-0000-0000-000000000021'
+    )
+  $$,
+  'P0001',
+  'not_pet_owner',
+  'non-owner cannot view pet parent summaries'
 );
 
 select throws_ok(

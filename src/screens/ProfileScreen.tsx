@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,14 +17,39 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { MobilePetProfile, PetOwnerInvite } from '../types/pets';
+import { MobilePetProfile, PetOwnerInvite, PetOwnerSummary } from '../types/pets';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+const formatDate = (date: string | null) => {
+  if (!date) {
+    return 'Not recorded';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+  }).format(new Date(date));
+};
+
 export const ProfileScreen = () => {
-  const { createPetOwnerInvite, pets, loading, error } = usePetProfiles();
+  const {
+    createPetOwnerInvite,
+    getPetOwners,
+    pets,
+    loading,
+    error,
+    updatePet,
+  } = usePetProfiles();
   const navigation = useNavigation<NavigationProp>();
-  const [invitePet, setInvitePet] = useState<MobilePetProfile | null>(null);
+  const [selectedPet, setSelectedPet] = useState<MobilePetProfile | null>(null);
+  const [petParents, setPetParents] = useState<PetOwnerSummary[]>([]);
+  const [parentsLoading, setParentsLoading] = useState(false);
+  const [parentsError, setParentsError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBreed, setEditBreed] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [savingPet, setSavingPet] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invite, setInvite] = useState<PetOwnerInvite | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -45,15 +70,118 @@ export const ProfileScreen = () => {
     return `${pets.length} ${pets.length === 1 ? 'pet' : 'pets'} on your profile`;
   }, [loading, pets.length]);
 
-  const resetInviteModal = () => {
-    setInvitePet(null);
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchParents = async () => {
+      if (!selectedPet) {
+        setPetParents([]);
+        setParentsError(null);
+        return;
+      }
+
+      setParentsLoading(true);
+      setParentsError(null);
+
+      try {
+        const owners = await getPetOwners(selectedPet.id);
+
+        if (isMounted) {
+          setPetParents(owners);
+        }
+      } catch (ownerError) {
+        const message =
+          ownerError instanceof Error
+            ? ownerError.message
+            : 'Unable to load pet parents right now.';
+
+        if (isMounted) {
+          setParentsError(message);
+          setPetParents([]);
+        }
+      } finally {
+        if (isMounted) {
+          setParentsLoading(false);
+        }
+      }
+    };
+
+    void fetchParents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getPetOwners, selectedPet]);
+
+  const openPetDetail = (pet: MobilePetProfile) => {
+    setSelectedPet(pet);
+    setEditName(pet.name);
+    setEditBreed(pet.breed);
+    setEditBio(pet.bio ?? '');
+    setEditing(false);
+    setInviteEmail('');
+    setInvite(null);
+  };
+
+  const closePetDetail = () => {
+    setSelectedPet(null);
+    setPetParents([]);
+    setParentsError(null);
+    setEditing(false);
+    setSavingPet(false);
     setInviteEmail('');
     setInvite(null);
     setCreatingInvite(false);
   };
 
+  const cancelEditing = () => {
+    if (!selectedPet) {
+      return;
+    }
+
+    setEditName(selectedPet.name);
+    setEditBreed(selectedPet.breed);
+    setEditBio(selectedPet.bio ?? '');
+    setEditing(false);
+  };
+
+  const handleSavePet = async () => {
+    if (!selectedPet) {
+      return;
+    }
+
+    const name = editName.trim();
+    const breed = editBreed.trim();
+
+    if (!name || !breed) {
+      Alert.alert('Missing details', 'Name and breed are required.');
+      return;
+    }
+
+    setSavingPet(true);
+
+    try {
+      const updatedPet = await updatePet(selectedPet.id, {
+        bio: editBio,
+        breed,
+        name,
+      });
+      setSelectedPet(updatedPet);
+      setEditing(false);
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error
+          ? saveError.message
+          : 'Unable to update this pet right now.';
+
+      Alert.alert('Update failed', message);
+    } finally {
+      setSavingPet(false);
+    }
+  };
+
   const handleCreateInvite = async () => {
-    if (!invitePet) {
+    if (!selectedPet) {
       return;
     }
 
@@ -68,7 +196,7 @@ export const ProfileScreen = () => {
     setCreatingInvite(true);
 
     try {
-      const createdInvite = await createPetOwnerInvite(invitePet.id, normalizedEmail);
+      const createdInvite = await createPetOwnerInvite(selectedPet.id, normalizedEmail);
       setInvite(createdInvite);
     } catch (inviteError) {
       const message =
@@ -88,7 +216,7 @@ export const ProfileScreen = () => {
     }
 
     await Share.share({
-      message: `You have been invited to share ${invitePet?.name ?? 'a pet'} on PawCult: ${inviteLink}`,
+      message: `You have been invited to share ${selectedPet?.name ?? 'a pet'} on PawCult: ${inviteLink}`,
       url: inviteLink,
       title: 'PawCult pet owner invite',
     });
@@ -134,7 +262,14 @@ export const ProfileScreen = () => {
       ) : (
         <View style={styles.petList}>
           {pets.map((pet) => (
-            <View key={pet.id} style={styles.petCard}>
+            <Pressable
+              key={pet.id}
+              onPress={() => openPetDetail(pet)}
+              style={({ pressed }) => [
+                styles.petCard,
+                pressed ? styles.cardPressed : null,
+              ]}
+            >
               {pet.profilePhotoUri ? (
                 <Image source={{ uri: pet.profilePhotoUri }} style={styles.petImage} />
               ) : (
@@ -159,30 +294,17 @@ export const ProfileScreen = () => {
                     {pet.bio}
                   </Text>
                 ) : (
-                  <Text style={styles.petBioPlaceholder}>
-                    No bio yet. You can flesh this out more when the full profile backend is ready.
-                  </Text>
+                  <Text style={styles.petBioPlaceholder}>No bio yet.</Text>
                 )}
-                <Pressable
-                  onPress={() => setInvitePet(pet)}
-                  style={({ pressed }) => [
-                    styles.inviteOwnerButton,
-                    pressed ? styles.addPetButtonPressed : null,
-                  ]}
-                >
-                  <Text style={styles.inviteOwnerButtonText}>
-                    Invite another owner
-                  </Text>
-                </Pressable>
               </View>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
 
       <Pressable
         onPress={() => navigation.navigate('CreatePet')}
-        style={({ pressed }) => [styles.addPetButton, pressed ? styles.addPetButtonPressed : null]}
+        style={({ pressed }) => [styles.addPetButton, pressed ? styles.buttonPressed : null]}
       >
         <Text style={styles.addPetButtonIcon}>＋</Text>
         <Text style={styles.addPetButtonText}>Add Pet</Text>
@@ -190,90 +312,268 @@ export const ProfileScreen = () => {
 
       <Modal
         animationType="slide"
-        onRequestClose={resetInviteModal}
+        onRequestClose={closePetDetail}
         transparent
-        visible={invitePet !== null}
+        visible={selectedPet !== null}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            {invite ? (
-              <>
-                <Text style={styles.modalTitle}>Invite created</Text>
-                <Text style={styles.modalDescription}>
-                  Invite created for {invite.invitedEmail}
-                </Text>
-                <View style={styles.inviteLinkBox}>
-                  <Text selectable style={styles.inviteLinkText}>
-                    {inviteLink}
-                  </Text>
-                </View>
-                <View style={styles.modalActions}>
-                  <Pressable
-                    onPress={resetInviteModal}
-                    style={({ pressed }) => [
-                      styles.modalCancelButton,
-                      pressed ? styles.addPetButtonPressed : null,
-                    ]}
-                  >
-                    <Text style={styles.modalCancelButtonText}>Done</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={handleShareInvite}
-                    style={({ pressed }) => [
-                      styles.modalSubmitButton,
-                      pressed ? styles.addPetButtonPressed : null,
-                    ]}
-                  >
-                    <Text style={styles.modalSubmitButtonText}>Share invite</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalTitle}>Invite another owner</Text>
-                <Text style={styles.modalDescription}>
-                  Send an owner invite for {invitePet?.name ?? 'this pet'}.
-                </Text>
-                <TextInput
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  editable={!creatingInvite}
-                  keyboardType="email-address"
-                  onChangeText={setInviteEmail}
-                  placeholder="Email address"
-                  placeholderTextColor="#94a3b8"
-                  style={styles.input}
-                  value={inviteEmail}
-                />
-                <View style={styles.modalActions}>
-                  <Pressable
-                    disabled={creatingInvite}
-                    onPress={resetInviteModal}
-                    style={({ pressed }) => [
-                      styles.modalCancelButton,
-                      pressed && !creatingInvite ? styles.addPetButtonPressed : null,
-                    ]}
-                  >
-                    <Text style={styles.modalCancelButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={creatingInvite}
-                    onPress={handleCreateInvite}
-                    style={({ pressed }) => [
-                      styles.modalSubmitButton,
-                      creatingInvite ? styles.buttonDisabled : null,
-                      pressed && !creatingInvite ? styles.addPetButtonPressed : null,
-                    ]}
-                  >
-                    {creatingInvite ? (
-                      <ActivityIndicator color="#ffffff" />
+          <View style={styles.detailSheet}>
+            <ScrollView contentContainerStyle={styles.detailContent}>
+              {selectedPet ? (
+                <>
+                  {selectedPet.profilePhotoUri ? (
+                    <Image
+                      source={{ uri: selectedPet.profilePhotoUri }}
+                      style={styles.detailImage}
+                    />
+                  ) : (
+                    <View style={styles.detailImagePlaceholder}>
+                      <Text style={styles.detailImagePlaceholderIcon}>🐾</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.detailHeader}>
+                    <View style={styles.detailTitleBlock}>
+                      <Text style={styles.detailTitle}>{selectedPet.name}</Text>
+                      <Text style={styles.detailSubtitle}>{selectedPet.breed}</Text>
+                    </View>
+                    {selectedPet.isShared ? (
+                      <View style={styles.sharedBadge}>
+                        <Text style={styles.sharedBadgeText}>Shared</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>Pet details</Text>
+                      {editing ? null : (
+                        <Pressable
+                          onPress={() => setEditing(true)}
+                          style={({ pressed }) => [
+                            styles.smallButton,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                        >
+                          <Text style={styles.smallButtonText}>Edit</Text>
+                        </Pressable>
+                      )}
+                    </View>
+
+                    {editing ? (
+                      <View style={styles.form}>
+                        <TextInput
+                          autoCapitalize="words"
+                          editable={!savingPet}
+                          onChangeText={setEditName}
+                          placeholder="Name"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.input}
+                          value={editName}
+                        />
+                        <TextInput
+                          autoCapitalize="words"
+                          editable={!savingPet}
+                          onChangeText={setEditBreed}
+                          placeholder="Breed"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.input}
+                          value={editBreed}
+                        />
+                        <TextInput
+                          editable={!savingPet}
+                          multiline
+                          onChangeText={setEditBio}
+                          placeholder="Bio"
+                          placeholderTextColor="#94a3b8"
+                          style={[styles.input, styles.bioInput]}
+                          textAlignVertical="top"
+                          value={editBio}
+                        />
+                        <View style={styles.rowActions}>
+                          <Pressable
+                            disabled={savingPet}
+                            onPress={cancelEditing}
+                            style={({ pressed }) => [
+                              styles.secondaryButton,
+                              pressed && !savingPet ? styles.buttonPressed : null,
+                            ]}
+                          >
+                            <Text style={styles.secondaryButtonText}>Cancel</Text>
+                          </Pressable>
+                          <Pressable
+                            disabled={savingPet}
+                            onPress={handleSavePet}
+                            style={({ pressed }) => [
+                              styles.primaryButton,
+                              savingPet ? styles.buttonDisabled : null,
+                              pressed && !savingPet ? styles.buttonPressed : null,
+                            ]}
+                          >
+                            {savingPet ? (
+                              <ActivityIndicator color="#ffffff" />
+                            ) : (
+                              <Text style={styles.primaryButtonText}>Save</Text>
+                            )}
+                          </Pressable>
+                        </View>
+                      </View>
                     ) : (
-                      <Text style={styles.modalSubmitButtonText}>Create invite</Text>
+                      <View style={styles.detailsGrid}>
+                        <View style={styles.detailField}>
+                          <Text style={styles.detailLabel}>Name</Text>
+                          <Text style={styles.detailValue}>{selectedPet.name}</Text>
+                        </View>
+                        <View style={styles.detailField}>
+                          <Text style={styles.detailLabel}>Breed</Text>
+                          <Text style={styles.detailValue}>{selectedPet.breed}</Text>
+                        </View>
+                        <View style={styles.detailField}>
+                          <Text style={styles.detailLabel}>Bio</Text>
+                          <Text style={styles.detailValue}>
+                            {selectedPet.bio ?? 'No bio yet.'}
+                          </Text>
+                        </View>
+                        <View style={styles.detailField}>
+                          <Text style={styles.detailLabel}>Created</Text>
+                          <Text style={styles.detailValue}>
+                            {formatDate(selectedPet.createdAt)}
+                          </Text>
+                        </View>
+                        <View style={styles.detailField}>
+                          <Text style={styles.detailLabel}>Pet parents</Text>
+                          <Text style={styles.detailValue}>
+                            {selectedPet.activeOwnerCount}
+                          </Text>
+                        </View>
+                      </View>
                     )}
-                  </Pressable>
-                </View>
-              </>
-            )}
+                  </View>
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Pet parents</Text>
+                    {parentsLoading ? (
+                      <View style={styles.inlineLoading}>
+                        <ActivityIndicator color="#8b5cf6" />
+                        <Text style={styles.helperText}>Loading parents...</Text>
+                      </View>
+                    ) : parentsError ? (
+                      <Text style={styles.errorText}>{parentsError}</Text>
+                    ) : (
+                      <View style={styles.parentList}>
+                        {petParents.map((parent) => (
+                          <View key={parent.id} style={styles.parentRow}>
+                            <View style={styles.parentAvatar}>
+                              <Text style={styles.parentAvatarText}>
+                                {parent.displayName.slice(0, 1).toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={styles.parentBody}>
+                              <View style={styles.parentNameRow}>
+                                <Text style={styles.parentName}>
+                                  {parent.displayName}
+                                </Text>
+                                {parent.isCurrentUser ? (
+                                  <View style={styles.youBadge}>
+                                    <Text style={styles.youBadgeText}>You</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                              <Text style={styles.parentMeta}>
+                                {parent.email ?? 'No email'} · {parent.role}
+                              </Text>
+                              <Text style={styles.parentMeta}>
+                                Joined {formatDate(parent.acceptedAt)}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Invite another owner</Text>
+                    {invite ? (
+                      <View style={styles.form}>
+                        <Text style={styles.helperText}>
+                          Invite created for {invite.invitedEmail}
+                        </Text>
+                        <View style={styles.inviteLinkBox}>
+                          <Text selectable style={styles.inviteLinkText}>
+                            {inviteLink}
+                          </Text>
+                        </View>
+                        <View style={styles.rowActions}>
+                          <Pressable
+                            onPress={() => {
+                              setInvite(null);
+                              setInviteEmail('');
+                            }}
+                            style={({ pressed }) => [
+                              styles.secondaryButton,
+                              pressed ? styles.buttonPressed : null,
+                            ]}
+                          >
+                            <Text style={styles.secondaryButtonText}>New invite</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={handleShareInvite}
+                            style={({ pressed }) => [
+                              styles.primaryButton,
+                              pressed ? styles.buttonPressed : null,
+                            ]}
+                          >
+                            <Text style={styles.primaryButtonText}>Share invite</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.form}>
+                        <TextInput
+                          autoCapitalize="none"
+                          autoComplete="email"
+                          editable={!creatingInvite}
+                          keyboardType="email-address"
+                          onChangeText={setInviteEmail}
+                          placeholder="Email address"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.input}
+                          value={inviteEmail}
+                        />
+                        <Pressable
+                          disabled={creatingInvite}
+                          onPress={handleCreateInvite}
+                          style={({ pressed }) => [
+                            styles.primaryButton,
+                            creatingInvite ? styles.buttonDisabled : null,
+                            pressed && !creatingInvite ? styles.buttonPressed : null,
+                          ]}
+                        >
+                          {creatingInvite ? (
+                            <ActivityIndicator color="#ffffff" />
+                          ) : (
+                            <Text style={styles.primaryButtonText}>Create invite</Text>
+                          )}
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                </>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <Pressable
+                onPress={closePetDetail}
+                style={({ pressed }) => [
+                  styles.footerButton,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+              >
+                <Text style={styles.footerButtonText}>Done</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -394,6 +694,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  cardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.995 }],
+  },
   petImage: {
     height: 220,
     width: '100%',
@@ -456,22 +760,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 12,
   },
-  inviteOwnerButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#f8fafc',
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  inviteOwnerButtonText: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '700',
-  },
   addPetButton: {
     alignItems: 'center',
     backgroundColor: '#8b5cf6',
@@ -481,9 +769,6 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: 20,
     width: '100%',
-  },
-  addPetButtonPressed: {
-    opacity: 0.9,
   },
   addPetButtonIcon: {
     color: '#ffffff',
@@ -497,28 +782,89 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modalBackdrop: {
-    alignItems: 'center',
     backgroundColor: 'rgba(15, 23, 42, 0.42)',
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
-  modalCard: {
+  detailSheet: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    gap: 14,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
+    overflow: 'hidden',
+  },
+  detailContent: {
+    gap: 18,
     padding: 20,
+    paddingBottom: 12,
+  },
+  detailImage: {
+    borderRadius: 18,
+    height: 220,
     width: '100%',
   },
-  modalTitle: {
+  detailImagePlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#ede9fe',
+    borderRadius: 18,
+    height: 220,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  detailImagePlaceholderIcon: {
+    fontSize: 44,
+  },
+  detailHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  detailTitleBlock: {
+    flex: 1,
+    gap: 3,
+  },
+  detailTitle: {
     color: '#0f172a',
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '700',
   },
-  modalDescription: {
-    color: '#64748b',
+  detailSubtitle: {
+    color: '#6d28d9',
     fontSize: 15,
-    lineHeight: 22,
+    fontWeight: '700',
+  },
+  section: {
+    borderTopColor: '#e2e8f0',
+    borderTopWidth: 1,
+    gap: 12,
+    paddingTop: 16,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    color: '#0f172a',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  smallButton: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  smallButtonText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  form: {
+    gap: 10,
   },
   input: {
     backgroundColor: '#ffffff',
@@ -529,6 +875,139 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  bioInput: {
+    minHeight: 110,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  secondaryButtonText: {
+    color: '#475569',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailsGrid: {
+    gap: 10,
+  },
+  detailField: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 4,
+    padding: 12,
+  },
+  detailLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  detailValue: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  inlineLoading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  parentList: {
+    gap: 10,
+  },
+  parentRow: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+  },
+  parentAvatar: {
+    alignItems: 'center',
+    backgroundColor: '#ede9fe',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  parentAvatarText: {
+    color: '#6d28d9',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  parentBody: {
+    flex: 1,
+    gap: 3,
+  },
+  parentNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  parentName: {
+    color: '#0f172a',
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  parentMeta: {
+    color: '#64748b',
+    fontSize: 13,
+  },
+  youBadge: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  youBadgeText: {
+    color: '#1d4ed8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  helperText: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    lineHeight: 20,
   },
   inviteLinkBox: {
     backgroundColor: '#f8fafc',
@@ -542,38 +1021,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'flex-end',
+  sheetFooter: {
+    borderTopColor: '#e2e8f0',
+    borderTopWidth: 1,
+    padding: 14,
   },
-  modalCancelButton: {
+  footerButton: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
+    backgroundColor: '#0f172a',
     borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 50,
   },
-  modalCancelButtonText: {
-    color: '#475569',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  modalSubmitButton: {
-    alignItems: 'center',
-    backgroundColor: '#8b5cf6',
-    borderRadius: 14,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  modalSubmitButtonText: {
+  footerButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
+  },
+  buttonPressed: {
+    opacity: 0.88,
   },
   buttonDisabled: {
     opacity: 0.6,
