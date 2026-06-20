@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,8 +15,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { useFriends } from '../context/FriendsContext';
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { FriendProfile, FriendSummary } from '../types/friends';
 import { MobilePetProfile, PetOwnerInvite, PetOwnerSummary } from '../types/pets';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -31,7 +33,39 @@ const formatDate = (date: string | null) => {
   }).format(new Date(date));
 };
 
+const formatDateTime = (date: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(date));
+
+const getFriendRequestMessage = (status: string, email: string) => {
+  switch (status) {
+    case 'accepted':
+      return 'You are now friends.';
+    case 'already_friends':
+      return 'Already friends.';
+    case 'no_account':
+      return 'No PawCult account found for this email yet.';
+    case 'request_pending':
+      return 'A friend request is already pending.';
+    case 'self':
+      return 'You cannot add yourself as a friend.';
+    case 'sent':
+      return `Friend request sent to ${email}.`;
+    default:
+      return 'Friend request updated.';
+  }
+};
+
 export const ProfileScreen = () => {
+  const {
+    fetchFriends,
+    friends,
+    getFriendProfile,
+    loading: friendsLoading,
+    sendFriendRequestByEmail,
+  } = useFriends();
   const {
     createPetOwnerInvite,
     getPetOwners,
@@ -53,6 +87,14 @@ export const ProfileScreen = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [invite, setInvite] = useState<PetOwnerInvite | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
+  const [friendEmail, setFriendEmail] = useState('');
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+  const [friendRequestMessage, setFriendRequestMessage] = useState<string | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<FriendSummary | null>(null);
+  const [friendProfile, setFriendProfile] = useState<FriendProfile | null>(null);
+  const [friendProfileLoading, setFriendProfileLoading] = useState(false);
+  const [friendProfileError, setFriendProfileError] = useState<string | null>(null);
 
   const inviteLink = invite
     ? `https://pawcult.app/invite/${invite.token}`
@@ -70,13 +112,22 @@ export const ProfileScreen = () => {
     return `${pets.length} ${pets.length === 1 ? 'pet' : 'pets'} on your profile`;
   }, [loading, pets.length]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const otherPetParents = useMemo(
+    () => petParents.filter((parent) => !parent.isCurrentUser),
+    [petParents]
+  );
 
-    const fetchParents = async () => {
-      if (!selectedPet) {
+  const selectedPetIsShared = (selectedPet?.activeOwnerCount ?? 0) > 1;
+  const shouldShowPetParentsSection =
+    selectedPetIsShared &&
+    (parentsLoading || parentsError !== null || otherPetParents.length > 0);
+
+  const loadPetParents = useCallback(
+    async (pet: MobilePetProfile | null = selectedPet) => {
+      if (!pet || pet.activeOwnerCount <= 1) {
         setPetParents([]);
         setParentsError(null);
+        setParentsLoading(false);
         return;
       }
 
@@ -84,37 +135,29 @@ export const ProfileScreen = () => {
       setParentsError(null);
 
       try {
-        const owners = await getPetOwners(selectedPet.id);
-
-        if (isMounted) {
-          setPetParents(owners);
-        }
+        const owners = await getPetOwners(pet.id);
+        setPetParents(owners);
       } catch (ownerError) {
-        const message =
-          ownerError instanceof Error
-            ? ownerError.message
-            : 'Unable to load pet parents right now.';
-
-        if (isMounted) {
-          setParentsError(message);
-          setPetParents([]);
-        }
+        console.warn('Unable to load pet parents', ownerError);
+        setParentsError('Could not load pet parents.');
+        setPetParents([]);
       } finally {
-        if (isMounted) {
-          setParentsLoading(false);
-        }
+        setParentsLoading(false);
       }
-    };
+    },
+    [getPetOwners, selectedPet]
+  );
 
-    void fetchParents();
+  useEffect(() => {
+    void loadPetParents();
+  }, [loadPetParents]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [getPetOwners, selectedPet]);
 
   const openPetDetail = (pet: MobilePetProfile) => {
     setSelectedPet(pet);
+    setPetParents([]);
+    setParentsError(null);
+    setParentsLoading(false);
     setEditName(pet.name);
     setEditBreed(pet.breed);
     setEditBio(pet.bio ?? '');
@@ -222,6 +265,78 @@ export const ProfileScreen = () => {
     });
   };
 
+  const openAddFriend = () => {
+    setFriendEmail('');
+    setFriendRequestMessage(null);
+    setIsAddFriendOpen(true);
+  };
+
+  const closeAddFriend = () => {
+    setIsAddFriendOpen(false);
+    setFriendEmail('');
+    setFriendRequestMessage(null);
+    setSendingFriendRequest(false);
+  };
+
+  const handleSendFriendRequest = async () => {
+    const normalizedEmail = friendEmail.trim().toLowerCase();
+    const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+
+    if (!emailIsValid) {
+      Alert.alert('Invalid email', 'Enter a valid email address.');
+      return;
+    }
+
+    setSendingFriendRequest(true);
+    setFriendRequestMessage(null);
+
+    try {
+      const result = await sendFriendRequestByEmail(normalizedEmail);
+      setFriendRequestMessage(getFriendRequestMessage(result.status, normalizedEmail));
+
+      if (result.status === 'accepted' || result.status === 'already_friends') {
+        await fetchFriends();
+      }
+    } catch (friendError) {
+      const message =
+        friendError instanceof Error
+          ? friendError.message
+          : 'Unable to send friend request right now.';
+
+      Alert.alert('Friend request failed', message);
+    } finally {
+      setSendingFriendRequest(false);
+    }
+  };
+
+  const openFriendProfile = async (friend: FriendSummary) => {
+    setSelectedFriend(friend);
+    setFriendProfile(null);
+    setFriendProfileError(null);
+    setFriendProfileLoading(true);
+
+    try {
+      const profile = await getFriendProfile(friend.friendUserId);
+      setFriendProfile(profile);
+    } catch (profileError) {
+      const message =
+        profileError instanceof Error
+          ? profileError.message
+          : 'Unable to load this friend right now.';
+
+      setFriendProfileError(message);
+    } finally {
+      setFriendProfileLoading(false);
+    }
+  };
+
+  const closeFriendProfile = () => {
+    setSelectedFriend(null);
+    setFriendProfile(null);
+    setFriendProfileError(null);
+    setFriendProfileLoading(false);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
       <View style={styles.heroCard}>
@@ -301,6 +416,62 @@ export const ProfileScreen = () => {
           ))}
         </View>
       )}
+
+      <View style={styles.friendsSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Friends</Text>
+          <Pressable
+            onPress={openAddFriend}
+            style={({ pressed }) => [
+              styles.smallButton,
+              pressed ? styles.buttonPressed : null,
+            ]}
+          >
+            <Text style={styles.smallButtonText}>Add Friend</Text>
+          </Pressable>
+        </View>
+
+        {friendsLoading ? (
+          <View style={styles.inlineLoading}>
+            <ActivityIndicator color="#8b5cf6" />
+            <Text style={styles.helperText}>Loading friends...</Text>
+          </View>
+        ) : friends.length === 0 ? (
+          <Text style={styles.helperText}>
+            Add friends by email to see their pets and check-ins here.
+          </Text>
+        ) : (
+          <View style={styles.friendList}>
+            {friends.map((friend) => (
+              <Pressable
+                key={friend.friendshipId}
+                onPress={() => void openFriendProfile(friend)}
+                style={({ pressed }) => [
+                  styles.friendCard,
+                  pressed ? styles.cardPressed : null,
+                ]}
+              >
+                <View style={styles.parentAvatar}>
+                  <Text style={styles.parentAvatarText}>
+                    {friend.displayName.slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.parentBody}>
+                  <Text style={styles.parentName}>{friend.displayName}</Text>
+                  <Text style={styles.parentMeta}>
+                    {friend.email ?? 'No email'}
+                  </Text>
+                  <Text style={styles.parentMeta}>
+                    {friend.petCount} {friend.petCount === 1 ? 'pet' : 'pets'} ·{' '}
+                    {friend.activeCheckInCount}{' '}
+                    {friend.activeCheckInCount === 1 ? 'check-in' : 'check-ins'}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
 
       <Pressable
         onPress={() => navigation.navigate('CreatePet')}
@@ -450,47 +621,53 @@ export const ProfileScreen = () => {
                     )}
                   </View>
 
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Pet parents</Text>
-                    {parentsLoading ? (
-                      <View style={styles.inlineLoading}>
-                        <ActivityIndicator color="#8b5cf6" />
-                        <Text style={styles.helperText}>Loading parents...</Text>
-                      </View>
-                    ) : parentsError ? (
-                      <Text style={styles.errorText}>{parentsError}</Text>
-                    ) : (
-                      <View style={styles.parentList}>
-                        {petParents.map((parent) => (
-                          <View key={parent.id} style={styles.parentRow}>
-                            <View style={styles.parentAvatar}>
-                              <Text style={styles.parentAvatarText}>
-                                {parent.displayName.slice(0, 1).toUpperCase()}
-                              </Text>
-                            </View>
-                            <View style={styles.parentBody}>
-                              <View style={styles.parentNameRow}>
+                  {shouldShowPetParentsSection ? (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Pet parents</Text>
+                      {parentsLoading ? (
+                        <View style={styles.inlineLoading}>
+                          <ActivityIndicator color="#8b5cf6" />
+                          <Text style={styles.helperText}>Loading parents...</Text>
+                        </View>
+                      ) : parentsError ? (
+                        <View style={styles.retryRow}>
+                          <Text style={styles.errorText}>{parentsError}</Text>
+                          <Pressable
+                            onPress={() => void loadPetParents()}
+                            style={({ pressed }) => [
+                              styles.smallButton,
+                              pressed ? styles.buttonPressed : null,
+                            ]}
+                          >
+                            <Text style={styles.smallButtonText}>Retry</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={styles.parentList}>
+                          {otherPetParents.map((parent) => (
+                            <View key={parent.id} style={styles.parentRow}>
+                              <View style={styles.parentAvatar}>
+                                <Text style={styles.parentAvatarText}>
+                                  {parent.displayName.slice(0, 1).toUpperCase()}
+                                </Text>
+                              </View>
+                              <View style={styles.parentBody}>
                                 <Text style={styles.parentName}>
                                   {parent.displayName}
                                 </Text>
-                                {parent.isCurrentUser ? (
-                                  <View style={styles.youBadge}>
-                                    <Text style={styles.youBadgeText}>You</Text>
-                                  </View>
-                                ) : null}
+                                <Text style={styles.parentMeta}>
+                                  {parent.email ?? 'No email'} · {parent.role}
+                                </Text>
+                                <Text style={styles.parentMeta}>
+                                  Joined {formatDate(parent.acceptedAt)}
+                                </Text>
                               </View>
-                              <Text style={styles.parentMeta}>
-                                {parent.email ?? 'No email'} · {parent.role}
-                              </Text>
-                              <Text style={styles.parentMeta}>
-                                Joined {formatDate(parent.acceptedAt)}
-                              </Text>
                             </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
 
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Invite another owner</Text>
@@ -566,6 +743,165 @@ export const ProfileScreen = () => {
             <View style={styles.sheetFooter}>
               <Pressable
                 onPress={closePetDetail}
+                style={({ pressed }) => [
+                  styles.footerButton,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+              >
+                <Text style={styles.footerButtonText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={closeAddFriend}
+        transparent
+        visible={isAddFriendOpen}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.smallSheet}>
+            <Text style={styles.detailTitle}>Add Friend</Text>
+            <Text style={styles.helperText}>
+              Send a friend request using their PawCult account email.
+            </Text>
+            <TextInput
+              autoCapitalize="none"
+              autoComplete="email"
+              editable={!sendingFriendRequest}
+              keyboardType="email-address"
+              onChangeText={setFriendEmail}
+              placeholder="Email address"
+              placeholderTextColor="#94a3b8"
+              style={styles.input}
+              value={friendEmail}
+            />
+            {friendRequestMessage ? (
+              <Text style={styles.helperText}>{friendRequestMessage}</Text>
+            ) : null}
+            <View style={styles.rowActions}>
+              <Pressable
+                disabled={sendingFriendRequest}
+                onPress={closeAddFriend}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && !sendingFriendRequest ? styles.buttonPressed : null,
+                ]}
+              >
+                <Text style={styles.secondaryButtonText}>Done</Text>
+              </Pressable>
+              <Pressable
+                disabled={sendingFriendRequest}
+                onPress={handleSendFriendRequest}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  sendingFriendRequest ? styles.buttonDisabled : null,
+                  pressed && !sendingFriendRequest ? styles.buttonPressed : null,
+                ]}
+              >
+                {sendingFriendRequest ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Send Request</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={closeFriendProfile}
+        transparent
+        visible={selectedFriend !== null}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.detailSheet}>
+            <ScrollView contentContainerStyle={styles.detailContent}>
+              <View style={styles.detailHeader}>
+                <View style={styles.detailTitleBlock}>
+                  <Text style={styles.detailTitle}>
+                    {friendProfile?.displayName ?? selectedFriend?.displayName ?? 'Friend'}
+                  </Text>
+                  <Text style={styles.detailSubtitle}>
+                    {friendProfile?.email ?? selectedFriend?.email ?? 'No email'}
+                  </Text>
+                </View>
+              </View>
+
+              {friendProfileLoading ? (
+                <View style={styles.inlineLoading}>
+                  <ActivityIndicator color="#8b5cf6" />
+                  <Text style={styles.helperText}>Loading friend...</Text>
+                </View>
+              ) : friendProfileError ? (
+                <Text style={styles.errorText}>{friendProfileError}</Text>
+              ) : friendProfile ? (
+                <>
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Pets</Text>
+                    {friendProfile.pets.length === 0 ? (
+                      <Text style={styles.helperText}>No pets to show yet.</Text>
+                    ) : (
+                      <View style={styles.parentList}>
+                        {friendProfile.pets.map((pet) => (
+                          <View key={pet.id} style={styles.parentRow}>
+                            {pet.profilePhotoUri ? (
+                              <Image
+                                source={{ uri: pet.profilePhotoUri }}
+                                style={styles.parentAvatar}
+                              />
+                            ) : (
+                              <View style={styles.parentAvatar}>
+                                <Text style={styles.parentAvatarText}>
+                                  {pet.name.slice(0, 1).toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.parentBody}>
+                              <Text style={styles.parentName}>{pet.name}</Text>
+                              <Text style={styles.parentMeta}>{pet.breed}</Text>
+                              {pet.bio ? (
+                                <Text style={styles.parentMeta}>{pet.bio}</Text>
+                              ) : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Checked in now</Text>
+                    {friendProfile.checkIns.length === 0 ? (
+                      <Text style={styles.helperText}>
+                        No current check-ins to show.
+                      </Text>
+                    ) : (
+                      <View style={styles.parentList}>
+                        {friendProfile.checkIns.map((checkIn) => (
+                          <View key={checkIn.id} style={styles.detailField}>
+                            <Text style={styles.detailValue}>
+                              {checkIn.petName} at {checkIn.dogParkName}
+                            </Text>
+                            <Text style={styles.parentMeta}>
+                              Until {formatDateTime(checkIn.endsAt)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <Pressable
+                onPress={closeFriendProfile}
                 style={({ pressed }) => [
                   styles.footerButton,
                   pressed ? styles.buttonPressed : null,
@@ -687,6 +1023,27 @@ const styles = StyleSheet.create({
   petList: {
     gap: 14,
   },
+  friendsSection: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+  },
+  friendList: {
+    gap: 10,
+  },
+  friendCard: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+  },
   petCard: {
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
@@ -792,6 +1149,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: '92%',
     overflow: 'hidden',
+  },
+  smallSheet: {
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    gap: 14,
+    margin: 20,
+    padding: 20,
   },
   detailContent: {
     gap: 18,
@@ -939,6 +1303,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
+  },
+  retryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
   },
   parentList: {
     gap: 10,

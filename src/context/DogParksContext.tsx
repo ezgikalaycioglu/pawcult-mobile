@@ -62,24 +62,24 @@ type DogParkFavoriteRow = {
   created_at: string;
 };
 
-type DogParkCheckInPetRow = {
-  id: string;
-  name: string;
-  breed: string;
-  bio: string | null;
-  profile_photo_url: string | null;
-};
-
 type DogParkCheckInRow = {
   id: string;
   dog_park_id: string;
   user_id: string;
+  user_display_name: string | null;
+  user_email: string | null;
   pet_id: string;
+  pet_name: string;
+  pet_breed: string;
+  pet_bio: string | null;
+  pet_profile_photo_url: string | null;
   starts_at: string;
   ends_at: string;
   checked_out_at: string | null;
   created_at: string;
-  pet_profiles: DogParkCheckInPetRow | DogParkCheckInPetRow[] | null;
+  is_current_user: boolean;
+  is_friend: boolean;
+  is_shared_pet_owner: boolean;
 };
 
 const DogParksContext = createContext<DogParksContextType | undefined>(undefined);
@@ -124,25 +124,14 @@ const mapDogParkFavoriteRow = (
   createdAt: row.created_at,
 });
 
-const getCheckInPet = (
-  petProfiles: DogParkCheckInRow['pet_profiles']
-): DogParkCheckInPetRow | null => {
-  if (Array.isArray(petProfiles)) {
-    return petProfiles[0] ?? null;
-  }
-
-  return petProfiles;
-};
-
 const mapDogParkCheckInRow = (row: DogParkCheckInRow): MobileDogParkCheckIn => {
-  const pet = getCheckInPet(row.pet_profiles);
-  const mappedPet: MobileDogParkCheckInPet | null = pet
+  const mappedPet: MobileDogParkCheckInPet | null = row.pet_id
     ? {
-        id: pet.id,
-        name: pet.name,
-        breed: pet.breed,
-        bio: pet.bio,
-        profilePhotoUri: pet.profile_photo_url,
+        id: row.pet_id,
+        name: row.pet_name,
+        breed: row.pet_breed,
+        bio: row.pet_bio,
+        profilePhotoUri: row.pet_profile_photo_url,
       }
     : null;
 
@@ -150,11 +139,16 @@ const mapDogParkCheckInRow = (row: DogParkCheckInRow): MobileDogParkCheckIn => {
     id: row.id,
     dogParkId: row.dog_park_id,
     userId: row.user_id,
+    userDisplayName: row.user_display_name,
+    userEmail: row.user_email,
     petId: row.pet_id,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     checkedOutAt: row.checked_out_at,
     createdAt: row.created_at,
+    isCurrentUser: row.is_current_user,
+    isFriend: row.is_friend,
+    isSharedPetOwner: row.is_shared_pet_owner,
     status: getCheckInStatus({
       startsAt: row.starts_at,
       endsAt: row.ends_at,
@@ -191,24 +185,23 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     try {
       const now = new Date();
       const futureCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const { data, error: fetchError } = await supabase
-        .from('dog_park_checkins')
-        .select(
-          'id, dog_park_id, user_id, pet_id, starts_at, ends_at, checked_out_at, created_at, pet_profiles(id, name, breed, bio, profile_photo_url)'
-        )
-        .is('checked_out_at', null)
-        .gt('ends_at', now.toISOString())
-        .lte('starts_at', futureCutoff.toISOString())
-        .order('starts_at', { ascending: true });
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_visible_dog_park_checkins'
+      );
 
       if (fetchError) {
         throw fetchError;
       }
 
       setCheckIns(
-        (data ?? []).map((row) =>
-          mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
-        )
+        ((data ?? []) as DogParkCheckInRow[])
+          .filter(
+            (row) =>
+              row.checked_out_at === null &&
+              new Date(row.ends_at) > now &&
+              new Date(row.starts_at) <= futureCutoff
+          )
+          .map(mapDogParkCheckInRow)
       );
       setNowMs(Date.now());
     } catch (fetchError) {
@@ -236,8 +229,6 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     try {
-      const now = new Date();
-      const futureCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       const [parksResult, favoritesResult, checkInsResult] = await Promise.all([
         supabase
           .from('dog_parks')
@@ -247,15 +238,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
           .from('dog_park_favorites')
           .select('dog_park_id, created_at')
           .order('created_at', { ascending: false }),
-        supabase
-          .from('dog_park_checkins')
-          .select(
-            'id, dog_park_id, user_id, pet_id, starts_at, ends_at, checked_out_at, created_at, pet_profiles(id, name, breed, bio, profile_photo_url)'
-          )
-          .is('checked_out_at', null)
-          .gt('ends_at', now.toISOString())
-          .lte('starts_at', futureCutoff.toISOString())
-          .order('starts_at', { ascending: true }),
+        supabase.rpc('get_visible_dog_park_checkins'),
       ]);
 
       if (parksResult.error) {
@@ -277,9 +260,7 @@ export const DogParksProvider = ({ children }: { children: ReactNode }) => {
         )
       );
       setCheckIns(
-        (checkInsResult.data ?? []).map((row) =>
-          mapDogParkCheckInRow(row as unknown as DogParkCheckInRow)
-        )
+        ((checkInsResult.data ?? []) as DogParkCheckInRow[]).map(mapDogParkCheckInRow)
       );
       setNowMs(Date.now());
     } catch (fetchError) {

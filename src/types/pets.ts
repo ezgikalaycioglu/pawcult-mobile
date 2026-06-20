@@ -51,3 +51,26 @@ export type PetOwnerInvitePreview = {
   expiresAt: string;
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
 };
+
+export type PetOwnerRequestStatus =
+  | 'pending'
+  | 'accepted'
+  | 'expired'
+  | 'revoked'
+  | 'declined'
+  | 'canceled';
+
+export type PetOwnerRequestDirection = 'incoming' | 'sent';
+
+export type PetOwnerRequest = {
+  id: string;
+  petId: string;
+  petName: string;
+  inviterDisplayName: string | null;
+  inviterEmail: string | null;
+  invitedEmail: string;
+  token: string | null;
+  status: PetOwnerRequestStatus;
+  createdAt: string;
+  expiresAt: string;
+};

@@ -78,6 +78,25 @@ const getDogCountCopy = (
   plural: string
 ) => `${count} ${count === 1 ? singular : plural}`;
 
+const getCheckInRelationshipLabel = (
+  checkIn: {
+    isFriend: boolean;
+    isSharedPetOwner: boolean;
+    userDisplayName: string | null;
+  },
+  fallback: string
+) => {
+  if (checkIn.isFriend) {
+    return `${checkIn.userDisplayName ?? fallback}'s pet`;
+  }
+
+  if (checkIn.isSharedPetOwner) {
+    return `Shared with ${checkIn.userDisplayName ?? fallback}`;
+  }
+
+  return checkIn.userDisplayName ?? fallback;
+};
+
 export const CheckInScreen = () => {
   const mapRef = useRef<MapView | null>(null);
   const safeAreaInsets = useSafeAreaInsets();
@@ -688,6 +707,11 @@ export const CheckInScreen = () => {
                       <Text style={styles.checkInTime}>
                         Here until {formatTime(checkIn.endsAt)}
                       </Text>
+                      {checkIn.userId !== user?.id ? (
+                        <Text style={styles.checkInMeta}>
+                          {getCheckInRelationshipLabel(checkIn, 'Another owner')}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 ))}
@@ -740,6 +764,11 @@ export const CheckInScreen = () => {
                             Scheduled{' '}
                             {formatTimeRange(checkIn.startsAt, checkIn.endsAt)}
                           </Text>
+                          {checkIn.userId !== user?.id ? (
+                            <Text style={styles.checkInMeta}>
+                              {getCheckInRelationshipLabel(checkIn, 'Another owner')}
+                            </Text>
+                          ) : null}
                         </View>
                       </View>
                     ))}
@@ -1278,6 +1307,12 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 13,
     marginTop: 2,
+  },
+  checkInMeta: {
+    color: '#8b5cf6',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 3,
   },
   scheduledBlock: {
     marginTop: 14,

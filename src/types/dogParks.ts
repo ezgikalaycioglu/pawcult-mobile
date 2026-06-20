@@ -34,12 +34,17 @@ export type MobileDogParkCheckIn = {
   id: string;
   dogParkId: string;
   userId: string;
+  userDisplayName: string | null;
+  userEmail: string | null;
   petId: string;
   startsAt: string;
   endsAt: string;
   checkedOutAt: string | null;
   createdAt: string;
   status: DogParkCheckInStatus;
+  isCurrentUser: boolean;
+  isFriend: boolean;
+  isSharedPetOwner: boolean;
   pet: MobileDogParkCheckInPet | null;
 };
 

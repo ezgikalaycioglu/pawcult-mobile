@@ -13,6 +13,8 @@ import {
   MobilePetProfile,
   PetOwnerInvite,
   PetOwnerInvitePreview,
+  PetOwnerRequest,
+  PetOwnerRequestDirection,
   PetOwnerSummary,
   UpdateMobilePetInput,
 } from '../types/pets';
@@ -20,10 +22,16 @@ import { useAuth } from './AuthContext';
 
 type PetProfilesContextType = {
   acceptPetOwnerInvite: (token: string) => Promise<string>;
+  acceptPetOwnerRequest: (inviteId: string) => Promise<string>;
+  cancelPetOwnerInvite: (inviteId: string) => Promise<string>;
   createPetOwnerInvite: (petId: string, invitedEmail: string) => Promise<PetOwnerInvite>;
   createPet: (input: CreateMobilePetInput) => Promise<void>;
   creating: boolean;
+  declinePetOwnerRequest: (inviteId: string) => Promise<string>;
   error: string | null;
+  fetchPetOwnerRequests: (
+    direction: PetOwnerRequestDirection
+  ) => Promise<PetOwnerRequest[]>;
   fetchPets: () => Promise<void>;
   getPetOwners: (petId: string) => Promise<PetOwnerSummary[]>;
   getPetOwnerInvitePreview: (token: string) => Promise<PetOwnerInvitePreview>;
@@ -65,6 +73,19 @@ type PetOwnerInvitePreviewRow = {
   invited_email: string;
   expires_at: string;
   status: PetOwnerInvitePreview['status'];
+};
+
+type PetOwnerRequestRow = {
+  id: string;
+  pet_id: string;
+  pet_name: string;
+  inviter_display_name: string | null;
+  inviter_email: string | null;
+  invited_email: string;
+  token: string | null;
+  status: PetOwnerRequest['status'];
+  created_at: string;
+  expires_at: string;
 };
 
 type PetOwnerSummaryRow = {
@@ -133,6 +154,19 @@ const mapInvitePreviewRow = (
   invitedEmail: row.invited_email,
   expiresAt: row.expires_at,
   status: row.status,
+});
+
+const mapPetOwnerRequestRow = (row: PetOwnerRequestRow): PetOwnerRequest => ({
+  id: row.id,
+  petId: row.pet_id,
+  petName: row.pet_name,
+  inviterDisplayName: row.inviter_display_name,
+  inviterEmail: row.inviter_email,
+  invitedEmail: row.invited_email,
+  token: row.token,
+  status: row.status,
+  createdAt: row.created_at,
+  expiresAt: row.expires_at,
 });
 
 const mapOwnerSummaryRow = (row: PetOwnerSummaryRow): PetOwnerSummary => ({
@@ -474,6 +508,27 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
     return ((data ?? []) as PetOwnerSummaryRow[]).map(mapOwnerSummaryRow);
   };
 
+  const fetchPetOwnerRequests = async (
+    direction: PetOwnerRequestDirection
+  ): Promise<PetOwnerRequest[]> => {
+    if (!user?.id) {
+      throw new Error('User session is required to view pet owner requests.');
+    }
+
+    const { data, error: requestsError } = await supabase.rpc(
+      'get_pet_owner_requests',
+      {
+        request_direction: direction,
+      }
+    );
+
+    if (requestsError) {
+      throw requestsError;
+    }
+
+    return ((data ?? []) as PetOwnerRequestRow[]).map(mapPetOwnerRequestRow);
+  };
+
   const acceptPetOwnerInvite = async (token: string): Promise<string> => {
     if (!user?.id) {
       throw new Error('User session is required to accept this invite.');
@@ -494,6 +549,64 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
     return data as string;
   };
 
+  const acceptPetOwnerRequest = async (inviteId: string): Promise<string> => {
+    if (!user?.id) {
+      throw new Error('User session is required to accept this invite.');
+    }
+
+    const { data, error: acceptError } = await supabase.rpc(
+      'accept_pet_owner_request',
+      {
+        invite_id: inviteId,
+      }
+    );
+
+    if (acceptError) {
+      throw acceptError;
+    }
+
+    await fetchPets();
+    return data as string;
+  };
+
+  const declinePetOwnerRequest = async (inviteId: string): Promise<string> => {
+    if (!user?.id) {
+      throw new Error('User session is required to decline this invite.');
+    }
+
+    const { data, error: declineError } = await supabase.rpc(
+      'decline_pet_owner_request',
+      {
+        invite_id: inviteId,
+      }
+    );
+
+    if (declineError) {
+      throw declineError;
+    }
+
+    return data as string;
+  };
+
+  const cancelPetOwnerInvite = async (inviteId: string): Promise<string> => {
+    if (!user?.id) {
+      throw new Error('User session is required to cancel this invite.');
+    }
+
+    const { data, error: cancelError } = await supabase.rpc(
+      'cancel_pet_owner_invite',
+      {
+        invite_id: inviteId,
+      }
+    );
+
+    if (cancelError) {
+      throw cancelError;
+    }
+
+    return data as string;
+  };
+
   const value = useMemo<PetProfilesContextType>(
     () => ({
       pets,
@@ -506,7 +619,11 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
       createPetOwnerInvite,
       getPetOwnerInvitePreview,
       getPetOwners,
+      fetchPetOwnerRequests,
       acceptPetOwnerInvite,
+      acceptPetOwnerRequest,
+      declinePetOwnerRequest,
+      cancelPetOwnerInvite,
       resetPets,
     }),
     [pets, loading, creating, error, user?.id]

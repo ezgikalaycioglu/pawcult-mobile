@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(19);
+SELECT plan(39);
 
 create temp table test_ids (
   key text primary key,
@@ -12,6 +12,7 @@ values
   ('caner', '00000000-0000-0000-0000-000000000002'),
   ('stranger', '00000000-0000-0000-0000-000000000003'),
   ('new_owner', '00000000-0000-0000-0000-000000000004'),
+  ('decliner', '00000000-0000-0000-0000-000000000005'),
   ('park', '00000000-0000-0000-0000-000000000010'),
   ('robiko', '00000000-0000-0000-0000-000000000020'),
   ('private_pet', '00000000-0000-0000-0000-000000000021');
@@ -63,6 +64,18 @@ values
     'authenticated',
     'authenticated',
     'stranger@example.test',
+    'test-password',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    (select id from test_ids where key = 'decliner'),
+    'authenticated',
+    'authenticated',
+    'decliner@example.test',
     'test-password',
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -206,6 +219,61 @@ from public.create_pet_owner_invite(
   'new-owner@example.test'
 );
 
+insert into invite_tokens (key, token)
+select 'decliner', token
+from public.create_pet_owner_invite(
+  (select id from test_ids where key = 'robiko'),
+  'decliner@example.test'
+);
+
+insert into invite_tokens (key, token)
+select 'cancel', token
+from public.create_pet_owner_invite(
+  (select id from test_ids where key = 'robiko'),
+  'cancel@example.test'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.get_pet_owner_requests('sent')
+  ),
+  4,
+  'active owner can list sent pet owner requests'
+);
+
+select is(
+  (
+    select pet_name
+    from public.get_pet_owner_requests('sent')
+    where invited_email = 'caner@example.test'
+  ),
+  'Robiko',
+  'sent pet owner request includes pet name'
+);
+
+select is(
+  public.cancel_pet_owner_invite(
+    (
+      select id
+      from public.pet_owner_invites
+      where token = (select token from invite_tokens where key = 'cancel')
+    )
+  ),
+  (select id from test_ids where key = 'robiko'),
+  'active owner can cancel a sent pet owner request'
+);
+
+select is(
+  (
+    select status
+    from public.pet_owner_invites
+    where token = (select token from invite_tokens where key = 'cancel')
+  ),
+  'canceled',
+  'canceled sent pet owner request stores canceled status'
+);
+
 reset role;
 set local role authenticated;
 select pg_temp.authenticate_as(
@@ -236,6 +304,15 @@ select throws_ok(
   'user with different email cannot accept'
 );
 
+select is(
+  (
+    select count(*)::int
+    from public.get_pet_owner_requests('incoming')
+  ),
+  0,
+  'user without matching invite email cannot list incoming pet owner requests'
+);
+
 reset role;
 set local role authenticated;
 select pg_temp.authenticate_as(
@@ -244,11 +321,24 @@ select pg_temp.authenticate_as(
 );
 
 select is(
-  public.accept_pet_owner_invite(
-    (select token from invite_tokens where key = 'caner')
+  (
+    select count(*)::int
+    from public.get_pet_owner_requests('incoming')
+  ),
+  1,
+  'invited user can list incoming pet owner requests'
+);
+
+select is(
+  public.accept_pet_owner_request(
+    (
+      select id
+      from public.pet_owner_invites
+      where token = (select token from invite_tokens where key = 'caner')
+    )
   ),
   (select id from test_ids where key = 'robiko'),
-  'user with matching email can accept'
+  'user with matching email can accept from request sheet'
 );
 
 select ok(
@@ -320,6 +410,35 @@ select is(
   ),
   1,
   'pet appears in invited user My Pets list after accept'
+);
+
+reset role;
+set local role authenticated;
+select pg_temp.authenticate_as(
+  (select id from test_ids where key = 'decliner'),
+  'decliner@example.test'
+);
+
+select is(
+  public.decline_pet_owner_request(
+    (
+      select id
+      from public.pet_owner_invites
+      where token = (select token from invite_tokens where key = 'decliner')
+    )
+  ),
+  (select id from test_ids where key = 'robiko'),
+  'invited user can decline from request sheet'
+);
+
+select is(
+  (
+    select status
+    from public.pet_owner_invites
+    where token = (select token from invite_tokens where key = 'decliner')
+  ),
+  'declined',
+  'declined pet owner request stores declined status'
 );
 
 reset role;
@@ -411,11 +530,151 @@ select is(
   'check-in creators are inserted as attendees'
 );
 
+select is(
+  (
+    select status
+    from public.send_friend_request_by_email('ezgi@example.test')
+  ),
+  'sent',
+  'user can send a friend request by email'
+);
+
+select is(
+  (
+    select status
+    from public.send_friend_request_by_email('ezgi@example.test')
+  ),
+  'request_pending',
+  'duplicate outgoing friend request is not recreated'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.get_friend_requests('sent')
+  ),
+  1,
+  'requester can list sent friend requests'
+);
+
+select is(
+  (
+    select status
+    from public.send_friend_request_by_email('missing@example.test')
+  ),
+  'no_account',
+  'unknown friend email returns no account status'
+);
+
+select is(
+  (
+    select status
+    from public.send_friend_request_by_email('caner@example.test')
+  ),
+  'self',
+  'user cannot add themselves as a friend'
+);
+
+reset role;
+set local role authenticated;
+select pg_temp.authenticate_as(
+  (select id from test_ids where key = 'ezgi'),
+  'ezgi@example.test'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.get_friend_requests('incoming')
+  ),
+  1,
+  'addressee can list incoming friend requests'
+);
+
+select is(
+  public.respond_friend_request(
+    (
+      select id
+      from public.user_friends
+      where requester_user_id = (select id from test_ids where key = 'caner')
+        and addressee_user_id = (select id from test_ids where key = 'ezgi')
+    ),
+    'accept'
+  ),
+  (
+    select id
+    from public.user_friends
+    where requester_user_id = (select id from test_ids where key = 'caner')
+      and addressee_user_id = (select id from test_ids where key = 'ezgi')
+  ),
+  'addressee can accept incoming friend request'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.get_my_friends()
+  ),
+  1,
+  'accepted friendship appears in my friends'
+);
+
+select is(
+  (
+    select status
+    from public.send_friend_request_by_email('caner@example.test')
+  ),
+  'already_friends',
+  'accepted friends cannot create duplicate requests'
+);
+
+select is(
+  (
+    select public.get_friend_profile(
+      (select id from test_ids where key = 'caner')
+    ) ->> 'userId'
+  ),
+  (select id::text from test_ids where key = 'caner'),
+  'friend can view friend profile'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.get_visible_dog_park_checkins()
+    where user_id = (select id from test_ids where key = 'caner')
+      and is_friend
+      and user_email = 'caner@example.test'
+  ),
+  'friend check-in feed includes friend attending user info'
+);
+
 reset role;
 set local role authenticated;
 select pg_temp.authenticate_as(
   (select id from test_ids where key = 'stranger'),
   'stranger@example.test'
+);
+
+select throws_ok(
+  $$
+    select public.get_friend_profile(
+      '00000000-0000-0000-0000-000000000002'
+    )
+  $$,
+  'P0001',
+  'not_friends',
+  'non-friend cannot view friend profile'
+);
+
+select ok(
+  not exists (
+    select 1
+    from public.get_visible_dog_park_checkins()
+    where user_id = (select id from test_ids where key = 'caner')
+      and user_email is not null
+  ),
+  'non-friend check-in feed does not expose attending user email'
 );
 
 select is(
