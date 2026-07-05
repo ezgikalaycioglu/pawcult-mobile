@@ -72,9 +72,9 @@ export const PetOwnerInviteScreen = ({ navigation, route }: Props) => {
 
     const fetchPreview = async () => {
       if (!token) {
-        setError('This invite link is invalid or incomplete.');
         setPreview(null);
         setLoading(false);
+        navigation.replace(user ? 'App' : 'Login');
         return;
       }
 
@@ -104,7 +104,7 @@ export const PetOwnerInviteScreen = ({ navigation, route }: Props) => {
     return () => {
       isMounted = false;
     };
-  }, [getPetOwnerInvitePreview, token]);
+  }, [getPetOwnerInvitePreview, navigation, token, user]);
 
   const handleAcceptInvite = async () => {
     if (!token) {

@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { useAuth } from '../context/AuthContext';
+import { LegalDocumentType } from '../legal/legalText';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { authScreenStyles as styles } from '../styles/authScreenStyles';
 
@@ -21,6 +23,9 @@ export const SignupScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(
+    null
+  );
 
   const handleSignup = async () => {
     if (!email.trim() || !password) {
@@ -104,9 +109,30 @@ export const SignupScreen = ({ navigation }: Props) => {
                 Already have an account? <Text style={styles.secondaryButtonLink}>Sign In</Text>
               </Text>
             </Pressable>
+            <Text style={styles.helperText}>
+              By creating an account, you agree to the{' '}
+              <Text
+                onPress={() => setLegalDocument('terms')}
+                style={styles.secondaryButtonLink}
+              >
+                Terms
+              </Text>{' '}
+              and acknowledge the{' '}
+              <Text
+                onPress={() => setLegalDocument('privacy')}
+                style={styles.secondaryButtonLink}
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
           </View>
         </View>
       </View>
+      <LegalDocumentModal
+        documentType={legalDocument}
+        onClose={() => setLegalDocument(null)}
+      />
     </SafeAreaView>
   );
 };

@@ -6,20 +6,27 @@ import { MobileBottomNav, MobileTabKey } from '../components/MobileBottomNav';
 import { MobileTopNav } from '../components/MobileTopNav';
 import { MoreMenuModal } from '../components/MoreMenuModal';
 import { RequestsModal } from '../components/RequestsModal';
-import { PlaceholderModal } from '../components/PlaceholderModal';
+import { AdminReportsModal } from '../components/AdminReportsModal';
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
+import { SettingsModal } from '../components/SettingsModal';
 import { useAuth } from '../context/AuthContext';
+import { useModeration } from '../context/ModerationContext';
+import { LegalDocumentType } from '../legal/legalText';
 import { CheckInScreen } from './CheckInScreen';
 import { ProfileScreen } from './ProfileScreen';
 
-type PlaceholderType = 'settings' | 'contact' | null;
-
 export const SignedInShell = () => {
-  const { signOut } = useAuth();
+  const { deleteAccount, signOut } = useAuth();
+  const { isAdmin } = useModeration();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<MobileTabKey>('check-in');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isRequestsOpen, setIsRequestsOpen] = useState(false);
-  const [placeholder, setPlaceholder] = useState<PlaceholderType>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAdminReportsOpen, setIsAdminReportsOpen] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(
+    null
+  );
 
   const handleSignOut = async () => {
     try {
@@ -32,20 +39,10 @@ export const SignedInShell = () => {
     }
   };
 
-  const placeholderContent =
-    placeholder === 'settings'
-      ? {
-          title: 'Settings',
-          description:
-            'Settings is a placeholder for now. It will be added to the mobile app next.',
-        }
-      : placeholder === 'contact'
-        ? {
-            title: 'Contact Us',
-            description:
-              'Contact Us is a placeholder for now. The support flow will be added here.',
-          }
-        : null;
+  const handleCloseSettings = () => {
+    setIsSettingsOpen(false);
+    setLegalDocument(null);
+  };
 
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
@@ -64,10 +61,12 @@ export const SignedInShell = () => {
       </View>
 
       <MoreMenuModal
+        isAdmin={isAdmin}
         onClose={() => setIsMenuOpen(false)}
         onLogOut={handleSignOut}
+        onOpenAdminReports={() => setIsAdminReportsOpen(true)}
         onOpenRequests={() => setIsRequestsOpen(true)}
-        onOpenPlaceholder={setPlaceholder}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         topInset={insets.top}
         visible={isMenuOpen}
       />
@@ -77,11 +76,24 @@ export const SignedInShell = () => {
         visible={isRequestsOpen}
       />
 
-      <PlaceholderModal
-        description={placeholderContent?.description ?? ''}
-        onClose={() => setPlaceholder(null)}
-        title={placeholderContent?.title ?? ''}
-        visible={placeholder !== null}
+      <SettingsModal
+        isAdmin={isAdmin}
+        onClose={handleCloseSettings}
+        onDeleteAccount={deleteAccount}
+        onLogOut={handleSignOut}
+        onOpenAdminReports={() => setIsAdminReportsOpen(true)}
+        onOpenLegalDocument={setLegalDocument}
+        visible={isSettingsOpen}
+      />
+
+      <AdminReportsModal
+        onClose={() => setIsAdminReportsOpen(false)}
+        visible={isAdminReportsOpen}
+      />
+
+      <LegalDocumentModal
+        documentType={legalDocument}
+        onClose={() => setLegalDocument(null)}
       />
     </SafeAreaView>
   );

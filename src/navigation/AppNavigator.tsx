@@ -54,7 +54,7 @@ export const AppNavigator = () => {
 
   if (user) {
     return (
-      <NavigationContainer linking={linking}>
+      <NavigationContainer key="signed-in" linking={linking}>
         <Stack.Navigator
           initialRouteName={pendingInviteToken ? 'Invite' : 'App'}
           screenOptions={{ headerBackTitle: 'Back' }}
@@ -100,7 +100,7 @@ export const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer key="signed-out" linking={linking}>
       <Stack.Navigator
         initialRouteName="Login"
         screenOptions={{ headerBackTitle: 'Back' }}

@@ -23,6 +23,7 @@ type AuthContextType = {
   isRecoverySession: boolean;
   clearRecoveryError: () => void;
   clearPendingInviteToken: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   storePendingInviteToken: (token: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
@@ -182,6 +183,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await SecureStore.deleteItemAsync(PENDING_INVITE_TOKEN_KEY);
         setPendingInviteToken(null);
       },
+      deleteAccount: async () => {
+        const { error } = await supabase.functions.invoke('delete-account', {
+          method: 'POST',
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        await SecureStore.deleteItemAsync(PENDING_INVITE_TOKEN_KEY);
+        await supabase.auth.signOut({ scope: 'local' });
+        setPendingInviteToken(null);
+        setSession(null);
+        setUser(null);
+        setIsRecoverySession(false);
+      },
       storePendingInviteToken: async (token: string) => {
         await SecureStore.setItemAsync(PENDING_INVITE_TOKEN_KEY, token);
         setPendingInviteToken(token);
@@ -213,6 +230,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           throw error;
         }
 
+        await SecureStore.deleteItemAsync(PENDING_INVITE_TOKEN_KEY);
+        setPendingInviteToken(null);
         setSession(null);
         setUser(null);
         setIsRecoverySession(false);

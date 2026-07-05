@@ -73,6 +73,18 @@ supabase db lint
 - Keep `mobile-app/supabase/migrations` committed to git.
 - Do not create separate SQL histories for dev and production.
 - The same migration files should be applied to both environments.
+- The moderation migration automatically adds `info.pawcult@gmail.com` to
+  `public.app_admins` only if that Supabase Auth user already exists. If the
+  account is created later, add it manually:
+
+```sql
+insert into public.app_admins (user_id)
+select id
+from auth.users
+where lower(email) = 'info.pawcult@gmail.com'
+on conflict (user_id) do nothing;
+```
+
 - Store pet photos under the path pattern:
 
 ```text

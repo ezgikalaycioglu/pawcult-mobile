@@ -1,19 +1,23 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 type MoreMenuModalProps = {
+  isAdmin: boolean;
   onClose: () => void;
   onLogOut: () => Promise<void>;
+  onOpenAdminReports: () => void;
   onOpenRequests: () => void;
-  onOpenPlaceholder: (type: 'settings' | 'contact') => void;
+  onOpenSettings: () => void;
   topInset: number;
   visible: boolean;
 };
 
 export const MoreMenuModal = ({
+  isAdmin,
   onClose,
   onLogOut,
+  onOpenAdminReports,
   onOpenRequests,
-  onOpenPlaceholder,
+  onOpenSettings,
   topInset,
   visible,
 }: MoreMenuModalProps) => {
@@ -43,24 +47,28 @@ export const MoreMenuModal = ({
           <Pressable
             onPress={() => {
               onClose();
-              onOpenPlaceholder('settings');
+              onOpenSettings();
             }}
             style={({ pressed }) => [styles.item, pressed ? styles.itemPressed : null]}
           >
             <Text style={styles.itemIcon}>⚙</Text>
             <Text style={styles.itemText}>Settings</Text>
           </Pressable>
-          <View style={styles.separator} />
-          <Pressable
-            onPress={() => {
-              onClose();
-              onOpenPlaceholder('contact');
-            }}
-            style={({ pressed }) => [styles.item, pressed ? styles.itemPressed : null]}
-          >
-            <Text style={styles.itemIcon}>✉</Text>
-            <Text style={styles.itemText}>Contact Us</Text>
-          </Pressable>
+          {isAdmin ? (
+            <>
+              <View style={styles.separator} />
+              <Pressable
+                onPress={() => {
+                  onClose();
+                  onOpenAdminReports();
+                }}
+                style={({ pressed }) => [styles.item, pressed ? styles.itemPressed : null]}
+              >
+                <Text style={styles.itemIcon}>!</Text>
+                <Text style={styles.itemText}>Admin Reports</Text>
+              </Pressable>
+            </>
+          ) : null}
           <View style={styles.separator} />
           <Pressable
             onPress={async () => {

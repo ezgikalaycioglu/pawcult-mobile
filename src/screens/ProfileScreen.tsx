@@ -15,7 +15,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { ReportTarget, ReportUserModal } from '../components/ReportUserModal';
 import { useFriends } from '../context/FriendsContext';
+import { useModeration } from '../context/ModerationContext';
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { FriendProfile, FriendSummary } from '../types/friends';
@@ -67,6 +69,12 @@ export const ProfileScreen = () => {
     sendFriendRequestByEmail,
   } = useFriends();
   const {
+    blockUser,
+    blockedUsers,
+    fetchBlockedUsers,
+    unblockUser,
+  } = useModeration();
+  const {
     createPetOwnerInvite,
     getPetOwners,
     pets,
@@ -95,6 +103,8 @@ export const ProfileScreen = () => {
   const [friendProfile, setFriendProfile] = useState<FriendProfile | null>(null);
   const [friendProfileLoading, setFriendProfileLoading] = useState(false);
   const [friendProfileError, setFriendProfileError] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [unblockingUserIds, setUnblockingUserIds] = useState<string[]>([]);
 
   const inviteLink = invite
     ? `https://pawcult.app/invite/${invite.token}`
@@ -337,6 +347,67 @@ export const ProfileScreen = () => {
     setFriendProfileLoading(false);
   };
 
+  const handleBlockFriend = async () => {
+    if (!selectedFriend) {
+      return;
+    }
+
+    try {
+      await blockUser(selectedFriend.friendUserId);
+      await fetchFriends();
+      await fetchBlockedUsers();
+      closeFriendProfile();
+      Alert.alert('User blocked', 'This user has been removed from your PawCult view.');
+    } catch (blockError) {
+      const message =
+        blockError instanceof Error ? blockError.message : 'Unable to block this user.';
+
+      Alert.alert('Block failed', message);
+    }
+  };
+
+  const openFriendReport = () => {
+    if (!selectedFriend) {
+      return;
+    }
+
+    const target: ReportTarget = {
+      contentId: selectedFriend.friendUserId,
+      contentType: 'friend_profile',
+      reportedUserId: selectedFriend.friendUserId,
+      title: `Report ${selectedFriend.displayName}`,
+    };
+
+    closeFriendProfile();
+    requestAnimationFrame(() => {
+      setReportTarget(target);
+    });
+  };
+
+  const handleUnblockUser = async (targetUserId: string) => {
+    setUnblockingUserIds((currentIds) => [...currentIds, targetUserId]);
+
+    try {
+      await unblockUser(targetUserId);
+      await fetchFriends();
+      Alert.alert(
+        'User unblocked',
+        'You can send or accept friend requests with this user again.'
+      );
+    } catch (unblockError) {
+      const message =
+        unblockError instanceof Error
+          ? unblockError.message
+          : 'Unable to unblock this user.';
+
+      Alert.alert('Unblock failed', message);
+    } finally {
+      setUnblockingUserIds((currentIds) =>
+        currentIds.filter((userId) => userId !== targetUserId)
+      );
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
       <View style={styles.heroCard}>
@@ -472,6 +543,59 @@ export const ProfileScreen = () => {
           </View>
         )}
       </View>
+
+      {blockedUsers.length > 0 ? (
+        <View style={styles.friendsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Blocked</Text>
+          </View>
+
+          <View style={styles.friendList}>
+            {blockedUsers.map((blockedUser) => {
+              const unblocking = unblockingUserIds.includes(
+                blockedUser.blockedUserId
+              );
+
+              return (
+                <View
+                  key={blockedUser.blockedUserId}
+                  style={styles.blockedUserRow}
+                >
+                  <View style={styles.parentAvatar}>
+                    <Text style={styles.parentAvatarText}>
+                      {blockedUser.displayName.slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.parentBody}>
+                    <Text style={styles.parentName}>
+                      {blockedUser.displayName}
+                    </Text>
+                    <Text style={styles.parentMeta}>
+                      {blockedUser.email ?? 'No email'}
+                    </Text>
+                    <Text style={styles.parentMeta}>
+                      Blocked {formatDate(blockedUser.blockedAt)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    disabled={unblocking}
+                    onPress={() => void handleUnblockUser(blockedUser.blockedUserId)}
+                    style={({ pressed }) => [
+                      styles.unblockButton,
+                      unblocking ? styles.buttonDisabled : null,
+                      pressed && !unblocking ? styles.buttonPressed : null,
+                    ]}
+                  >
+                    <Text style={styles.unblockButtonText}>
+                      {unblocking ? '...' : 'Unblock'}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       <Pressable
         onPress={() => navigation.navigate('CreatePet')}
@@ -900,6 +1024,19 @@ export const ProfileScreen = () => {
             </ScrollView>
 
             <View style={styles.sheetFooter}>
+              {selectedFriend ? (
+                <View style={styles.moderationFooterActions}>
+                  <Pressable
+                    onPress={openFriendReport}
+                    style={styles.reportButton}
+                  >
+                    <Text style={styles.reportButtonText}>Report</Text>
+                  </Pressable>
+                  <Pressable onPress={handleBlockFriend} style={styles.blockButton}>
+                    <Text style={styles.blockButtonText}>Block</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               <Pressable
                 onPress={closeFriendProfile}
                 style={({ pressed }) => [
@@ -913,6 +1050,10 @@ export const ProfileScreen = () => {
           </View>
         </View>
       </Modal>
+      <ReportUserModal
+        onClose={() => setReportTarget(null)}
+        target={reportTarget}
+      />
     </ScrollView>
   );
 };
@@ -1035,6 +1176,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   friendCard: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+  },
+  blockedUserRow: {
     alignItems: 'center',
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
@@ -1394,7 +1545,52 @@ const styles = StyleSheet.create({
   sheetFooter: {
     borderTopColor: '#e2e8f0',
     borderTopWidth: 1,
+    gap: 10,
     padding: 14,
+  },
+  moderationFooterActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reportButton: {
+    alignItems: 'center',
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  reportButtonText: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  blockButton: {
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  blockButtonText: {
+    color: '#991b1b',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  unblockButton: {
+    alignItems: 'center',
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  unblockButtonText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
   },
   footerButton: {
     alignItems: 'center',

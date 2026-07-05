@@ -13,13 +13,15 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker, {
-  DateTimePickerChangeEvent,
+  DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import MapView, { MapPressEvent, Marker, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ReportTarget, ReportUserModal } from '../components/ReportUserModal';
 import { useAuth } from '../context/AuthContext';
 import { useDogParks } from '../context/DogParksContext';
+import { useModeration } from '../context/ModerationContext';
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { MobileDogPark } from '../types/dogParks';
 
@@ -101,6 +103,7 @@ export const CheckInScreen = () => {
   const mapRef = useRef<MapView | null>(null);
   const safeAreaInsets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { blockUser } = useModeration();
   const { pets } = usePetProfiles();
   const {
     approvedParks,
@@ -138,6 +141,7 @@ export const CheckInScreen = () => {
   );
   const [startTimeError, setStartTimeError] = useState<string | null>(null);
   const [showScheduledCheckIns, setShowScheduledCheckIns] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   const selectedParkCheckIns = selectedPark
     ? checkInsByParkId[selectedPark.id] ?? []
@@ -363,9 +367,13 @@ export const CheckInScreen = () => {
   };
 
   const handleLaterTimeChange = (
-    _event: DateTimePickerChangeEvent,
-    selectedDate: Date
+    _event: DateTimePickerEvent,
+    selectedDate?: Date
   ) => {
+    if (!selectedDate) {
+      return;
+    }
+
     setLaterStartTime(selectedDate);
     setStartTimeError(null);
   };
@@ -438,6 +446,37 @@ export const CheckInScreen = () => {
         'Could not cancel scheduled check-in. Please try again.'
       );
     }
+  };
+
+  const handleBlockCheckInUser = async (targetUserId: string) => {
+    try {
+      await blockUser(targetUserId);
+      await fetchDogParks();
+      Alert.alert('User blocked', 'You will no longer see this user in PawCult.');
+    } catch (blockError) {
+      const message =
+        blockError instanceof Error ? blockError.message : 'Unable to block this user.';
+
+      Alert.alert('Block failed', message);
+    }
+  };
+
+  const openCheckInReport = (
+    checkInId: string,
+    reportedUserId: string,
+    petName: string | null | undefined
+  ) => {
+    const target: ReportTarget = {
+      contentId: checkInId,
+      contentType: 'dog_park_checkin',
+      reportedUserId,
+      title: `Report ${petName ?? 'this check-in'}`,
+    };
+
+    resetSelectedPark();
+    requestAnimationFrame(() => {
+      setReportTarget(target);
+    });
   };
 
   return (
@@ -708,9 +747,31 @@ export const CheckInScreen = () => {
                         Here until {formatTime(checkIn.endsAt)}
                       </Text>
                       {checkIn.userId !== user?.id ? (
-                        <Text style={styles.checkInMeta}>
-                          {getCheckInRelationshipLabel(checkIn, 'Another owner')}
-                        </Text>
+                        <>
+                          <Text style={styles.checkInMeta}>
+                            {getCheckInRelationshipLabel(checkIn, 'Another owner')}
+                          </Text>
+                          <View style={styles.moderationActions}>
+                            <Pressable
+                              onPress={() =>
+                                openCheckInReport(
+                                  checkIn.id,
+                                  checkIn.userId,
+                                  checkIn.pet?.name
+                                )
+                              }
+                              style={styles.moderationButton}
+                            >
+                              <Text style={styles.moderationButtonText}>Report</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => handleBlockCheckInUser(checkIn.userId)}
+                              style={styles.moderationButton}
+                            >
+                              <Text style={styles.moderationButtonText}>Block</Text>
+                            </Pressable>
+                          </View>
+                        </>
                       ) : null}
                     </View>
                   </View>
@@ -765,9 +826,31 @@ export const CheckInScreen = () => {
                             {formatTimeRange(checkIn.startsAt, checkIn.endsAt)}
                           </Text>
                           {checkIn.userId !== user?.id ? (
-                            <Text style={styles.checkInMeta}>
-                              {getCheckInRelationshipLabel(checkIn, 'Another owner')}
-                            </Text>
+                            <>
+                              <Text style={styles.checkInMeta}>
+                                {getCheckInRelationshipLabel(checkIn, 'Another owner')}
+                              </Text>
+                              <View style={styles.moderationActions}>
+                                <Pressable
+                                  onPress={() =>
+                                    openCheckInReport(
+                                      checkIn.id,
+                                      checkIn.userId,
+                                      checkIn.pet?.name
+                                    )
+                                  }
+                                  style={styles.moderationButton}
+                                >
+                                  <Text style={styles.moderationButtonText}>Report</Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => handleBlockCheckInUser(checkIn.userId)}
+                                  style={styles.moderationButton}
+                                >
+                                  <Text style={styles.moderationButtonText}>Block</Text>
+                                </Pressable>
+                              </View>
+                            </>
                           ) : null}
                         </View>
                       </View>
@@ -968,7 +1051,7 @@ export const CheckInScreen = () => {
                         accessibilityLabel="Later check-in start time"
                         display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                         mode="time"
-                        onValueChange={handleLaterTimeChange}
+                        onChange={handleLaterTimeChange}
                         value={laterStartTime}
                       />
                     </View>
@@ -1027,6 +1110,10 @@ export const CheckInScreen = () => {
           ) : null}
         </Pressable>
       </Modal>
+      <ReportUserModal
+        onClose={() => setReportTarget(null)}
+        target={reportTarget}
+      />
     </View>
   );
 };
@@ -1313,6 +1400,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
+  },
+  moderationActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  moderationButton: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  moderationButtonText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
   },
   scheduledBlock: {
     marginTop: 14,
