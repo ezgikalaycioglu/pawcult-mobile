@@ -15,12 +15,15 @@
     },
     "ios": {
       "associatedDomains": [
+        "applinks:pawcult.app",
         "applinks:pawcult.app"
       ],
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "PawCult needs photo library access so you can choose a profile photo for your pet."
+        "NSPhotoLibraryUsageDescription": "PawCult needs photo library access so you can choose a profile photo for your pet.",
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pawcult.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -52,6 +55,11 @@
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0e679f44-2de5-4623-8295-7568e4a230f8"
+      }
+    }
   }
 }
