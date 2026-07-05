@@ -2,10 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +11,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { KeyboardSafeScreen } from '../components/KeyboardSafeScreen';
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
 
@@ -101,90 +99,9 @@ export const CreatePetScreen = ({ navigation }: Props) => {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardView}
-    >
-      <View style={styles.screen}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.headerCard}>
-            <Text style={styles.headerTitle}>Create Pet Profile</Text>
-            <Text style={styles.headerSubtitle}>
-              Add your pet to your mobile profile and save it to PawCult.
-            </Text>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionLabel}>Profile Photo</Text>
-            <Pressable
-              onPress={handlePickImage}
-              style={({ pressed }) => [styles.photoPicker, pressed ? styles.photoPressed : null]}
-            >
-              {profilePhotoUri ? (
-                <Image source={{ uri: profilePhotoUri }} style={styles.photoPreview} />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Text style={styles.photoPlaceholderIcon}>◌</Text>
-                  <Text style={styles.photoPlaceholderTitle}>
-                    {isPickingImage ? 'Opening library...' : 'Add a photo'}
-                  </Text>
-                  <Text style={styles.photoPlaceholderHint}>
-                    Choose a square profile image for your pet
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-            {profilePhotoUri ? (
-              <Pressable
-                onPress={handlePickImage}
-                style={({ pressed }) => [styles.secondaryAction, pressed ? styles.secondaryActionPressed : null]}
-              >
-                <Text style={styles.secondaryActionText}>Change Photo</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.inputLabel}>Pet Name *</Text>
-            <TextInput
-              maxLength={MAX_NAME_LENGTH}
-              onChangeText={setName}
-              placeholder="Enter your pet's name"
-              placeholderTextColor="#94a3b8"
-              style={styles.input}
-              value={name}
-            />
-            <Text style={styles.counter}>{name.length}/{MAX_NAME_LENGTH}</Text>
-
-            <Text style={[styles.inputLabel, styles.inputLabelSpaced]}>Breed or Mix *</Text>
-            <TextInput
-              maxLength={MAX_BREED_LENGTH}
-              onChangeText={setBreed}
-              placeholder="e.g. Golden Retriever or Mixed Breed"
-              placeholderTextColor="#94a3b8"
-              style={styles.input}
-              value={breed}
-            />
-            <Text style={styles.counter}>{breed.length}/{MAX_BREED_LENGTH}</Text>
-
-            <Text style={[styles.inputLabel, styles.inputLabelSpaced]}>Bio</Text>
-            <TextInput
-              maxLength={MAX_BIO_LENGTH}
-              multiline
-              onChangeText={setBio}
-              placeholder="Tell us a little about your pet"
-              placeholderTextColor="#94a3b8"
-              style={styles.textarea}
-              textAlignVertical="top"
-              value={bio}
-            />
-            <Text style={styles.counter}>{bio.length}/{MAX_BIO_LENGTH}</Text>
-          </View>
-        </ScrollView>
-
+    <KeyboardSafeScreen
+      contentStyle={styles.content}
+      footer={
         <View style={styles.footer}>
           <Pressable
             disabled={!canSave}
@@ -200,15 +117,88 @@ export const CreatePetScreen = ({ navigation }: Props) => {
             </Text>
           </Pressable>
         </View>
+      }
+      safeAreaEdges={['left', 'right', 'bottom']}
+      style={styles.screen}
+    >
+      <View style={styles.headerCard}>
+        <Text style={styles.headerTitle}>Create Pet Profile</Text>
+        <Text style={styles.headerSubtitle}>
+          Add your pet to your mobile profile and save it to PawCult.
+        </Text>
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>Profile Photo</Text>
+        <Pressable
+          onPress={handlePickImage}
+          style={({ pressed }) => [styles.photoPicker, pressed ? styles.photoPressed : null]}
+        >
+          {profilePhotoUri ? (
+            <Image source={{ uri: profilePhotoUri }} style={styles.photoPreview} />
+          ) : (
+            <View style={styles.photoPlaceholder}>
+              <Text style={styles.photoPlaceholderIcon}>◌</Text>
+              <Text style={styles.photoPlaceholderTitle}>
+                {isPickingImage ? 'Opening library...' : 'Add a photo'}
+              </Text>
+              <Text style={styles.photoPlaceholderHint}>
+                Choose a square profile image for your pet
+              </Text>
+            </View>
+          )}
+        </Pressable>
+        {profilePhotoUri ? (
+          <Pressable
+            onPress={handlePickImage}
+            style={({ pressed }) => [styles.secondaryAction, pressed ? styles.secondaryActionPressed : null]}
+          >
+            <Text style={styles.secondaryActionText}>Change Photo</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.inputLabel}>Pet Name *</Text>
+        <TextInput
+          maxLength={MAX_NAME_LENGTH}
+          onChangeText={setName}
+          placeholder="Enter your pet's name"
+          placeholderTextColor="#94a3b8"
+          style={styles.input}
+          value={name}
+        />
+        <Text style={styles.counter}>{name.length}/{MAX_NAME_LENGTH}</Text>
+
+        <Text style={[styles.inputLabel, styles.inputLabelSpaced]}>Breed or Mix *</Text>
+        <TextInput
+          maxLength={MAX_BREED_LENGTH}
+          onChangeText={setBreed}
+          placeholder="e.g. Golden Retriever or Mixed Breed"
+          placeholderTextColor="#94a3b8"
+          style={styles.input}
+          value={breed}
+        />
+        <Text style={styles.counter}>{breed.length}/{MAX_BREED_LENGTH}</Text>
+
+        <Text style={[styles.inputLabel, styles.inputLabelSpaced]}>Bio</Text>
+        <TextInput
+          maxLength={MAX_BIO_LENGTH}
+          multiline
+          onChangeText={setBio}
+          placeholder="Tell us a little about your pet"
+          placeholderTextColor="#94a3b8"
+          style={styles.textarea}
+          textAlignVertical="top"
+          value={bio}
+        />
+        <Text style={styles.counter}>{bio.length}/{MAX_BIO_LENGTH}</Text>
+      </View>
+    </KeyboardSafeScreen>
   );
 };
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-  },
   screen: {
     backgroundColor: '#f8fafc',
     flex: 1,

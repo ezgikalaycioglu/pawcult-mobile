@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { KeyboardSafeScreen } from '../components/KeyboardSafeScreen';
 import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { useAuth } from '../context/AuthContext';
 import { LegalDocumentType } from '../legal/legalText';
@@ -52,8 +52,11 @@ export const SignupScreen = ({ navigation }: Props) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <>
+      <KeyboardSafeScreen
+        contentStyle={styles.keyboardContainer}
+        style={styles.safeArea}
+      >
         <View style={styles.brand}>
           <Text style={styles.brandIcon}>🐾</Text>
           <Text style={styles.brandTitle}>PawCult</Text>
@@ -128,11 +131,11 @@ export const SignupScreen = ({ navigation }: Props) => {
             </Text>
           </View>
         </View>
-      </View>
+      </KeyboardSafeScreen>
       <LegalDocumentModal
         documentType={legalDocument}
         onClose={() => setLegalDocument(null)}
       />
-    </SafeAreaView>
+    </>
   );
 };

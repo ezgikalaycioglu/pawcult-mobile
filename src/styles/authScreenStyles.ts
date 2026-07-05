@@ -11,6 +11,13 @@ export const authScreenStyles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#f8fafc',
   },
+  keyboardContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+    paddingBottom: 120,
+    backgroundColor: '#f8fafc',
+  },
   brand: {
     flexDirection: 'row',
     alignItems: 'center',
