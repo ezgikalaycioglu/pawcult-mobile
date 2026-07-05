@@ -330,6 +330,7 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
 
     let uploadedPath: string | null = null;
+    let petInserted = false;
 
     try {
       let profilePhotoUrl: string | null = null;
@@ -363,7 +364,7 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
         profilePhotoUrl = publicUrlData.publicUrl;
       }
 
-      const { data, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('pet_profiles')
         .insert({
           bio: input.bio.trim() ? input.bio.trim() : null,
@@ -372,19 +373,16 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
           name: input.name.trim(),
           profile_photo_url: profilePhotoUrl,
           user_id: user.id,
-        })
-        .select(
-          'id, user_id, created_by_user_id, name, breed, bio, profile_photo_url, created_at'
-        )
-        .single();
+        });
 
       if (insertError) {
         throw insertError;
       }
 
-      setPets((currentPets) => [mapPetRow(data as PetProfileRow), ...currentPets]);
+      petInserted = true;
+      await fetchPets();
     } catch (createError) {
-      if (uploadedPath) {
+      if (uploadedPath && !petInserted) {
         await supabase.storage.from('pet-photos').remove([uploadedPath]);
       }
 
