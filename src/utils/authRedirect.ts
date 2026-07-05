@@ -6,6 +6,8 @@ type SupabaseAuthRedirect = {
   type: string | null;
 };
 
+export const SUPABASE_AUTH_REDIRECT_URL = 'pawcult://auth/callback';
+
 const getParamsFromSegment = (segment: string | undefined) => {
   if (!segment) {
     return new URLSearchParams();

@@ -46,7 +46,7 @@ const AuthLoadingScreen = () => (
 );
 
 export const AppNavigator = () => {
-  const { loading, pendingInviteToken, user } = useAuth();
+  const { isRecoverySession, loading, pendingInviteToken, user } = useAuth();
 
   if (loading) {
     return <AuthLoadingScreen />;
@@ -54,9 +54,18 @@ export const AppNavigator = () => {
 
   if (user) {
     return (
-      <NavigationContainer key="signed-in" linking={linking}>
+      <NavigationContainer
+        key={isRecoverySession ? 'signed-in-recovery' : 'signed-in'}
+        linking={linking}
+      >
         <Stack.Navigator
-          initialRouteName={pendingInviteToken ? 'Invite' : 'App'}
+          initialRouteName={
+            isRecoverySession
+              ? 'ResetPassword'
+              : pendingInviteToken
+                ? 'Invite'
+                : 'App'
+          }
           screenOptions={{ headerBackTitle: 'Back' }}
         >
           <Stack.Screen

@@ -11,7 +11,10 @@ import * as SecureStore from 'expo-secure-store';
 import { Session, User } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
-import { parseSupabaseAuthRedirect } from '../utils/authRedirect';
+import {
+  parseSupabaseAuthRedirect,
+  SUPABASE_AUTH_REDIRECT_URL,
+} from '../utils/authRedirect';
 
 type AuthContextType = {
   user: User | null;
@@ -216,6 +219,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signUp: async (email: string, password: string) => {
         const { error } = await supabase.auth.signUp({
           email,
+          options: {
+            emailRedirectTo: SUPABASE_AUTH_REDIRECT_URL,
+          },
           password,
         });
 

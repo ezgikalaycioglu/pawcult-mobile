@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { authScreenStyles as styles } from '../styles/authScreenStyles';
+import { SUPABASE_AUTH_REDIRECT_URL } from '../utils/authRedirect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ForgotPassword'>;
 
@@ -33,7 +34,7 @@ export const ForgotPasswordScreen = ({ navigation }: Props) => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'pawcult://reset-password',
+        redirectTo: SUPABASE_AUTH_REDIRECT_URL,
       });
 
       if (error) {
