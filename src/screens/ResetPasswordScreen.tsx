@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { KeyboardSafeScreen } from '../components/KeyboardSafeScreen';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -86,77 +86,78 @@ export const ResetPasswordScreen = ({ navigation }: Props) => {
       : 'Open PawCult from the password reset link in your email to continue.';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.brand}>
-          <Text style={styles.brandIcon}>🐾</Text>
-          <Text style={styles.brandTitle}>PawCult</Text>
-        </View>
+    <KeyboardSafeScreen
+      contentStyle={styles.keyboardContainer}
+      style={styles.safeArea}
+    >
+      <View style={styles.brand}>
+        <Text style={styles.brandIcon}>🐾</Text>
+        <Text style={styles.brandTitle}>PawCult</Text>
+      </View>
 
-        <View style={styles.card}>
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>Create a new secure password</Text>
+      <View style={styles.card}>
+        <Text style={styles.title}>Reset Password</Text>
+        <Text style={styles.subtitle}>Create a new secure password</Text>
 
-          <View style={styles.form}>
-            <Text style={styles.helperText}>{helperMessage}</Text>
+        <View style={styles.form}>
+          <Text style={styles.helperText}>{helperMessage}</Text>
 
-            {recoveryLoading ? (
-              <ActivityIndicator color="#8b5cf6" />
-            ) : null}
+          {recoveryLoading ? (
+            <ActivityIndicator color="#8b5cf6" />
+          ) : null}
 
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={setPassword}
-              placeholder="New password"
-              placeholderTextColor="#94a3b8"
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm new password"
-              placeholderTextColor="#94a3b8"
-              secureTextEntry
-              style={styles.input}
-              value={confirmPassword}
-            />
+          <TextInput
+            autoCapitalize="none"
+            onChangeText={setPassword}
+            placeholder="New password"
+            placeholderTextColor="#94a3b8"
+            secureTextEntry
+            style={styles.input}
+            value={password}
+          />
+          <TextInput
+            autoCapitalize="none"
+            onChangeText={setConfirmPassword}
+            placeholder="Confirm new password"
+            placeholderTextColor="#94a3b8"
+            secureTextEntry
+            style={styles.input}
+            value={confirmPassword}
+          />
 
-            {recoveryError ? (
-              <Text style={styles.errorText}>{recoveryError}</Text>
-            ) : null}
+          {recoveryError ? (
+            <Text style={styles.errorText}>{recoveryError}</Text>
+          ) : null}
 
-            {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+          {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
 
-            <Pressable
-              disabled={submitting || recoveryLoading}
-              onPress={handleUpdatePassword}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && !submitting ? styles.primaryButtonPressed : null,
-                submitting || recoveryLoading ? styles.buttonDisabled : null,
-              ]}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Update Password</Text>
-              )}
-            </Pressable>
+          <Pressable
+            disabled={submitting || recoveryLoading}
+            onPress={handleUpdatePassword}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && !submitting ? styles.primaryButtonPressed : null,
+              submitting || recoveryLoading ? styles.buttonDisabled : null,
+            ]}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Update Password</Text>
+            )}
+          </Pressable>
 
-            <Pressable
-              disabled={submitting}
-              onPress={() => navigation.navigate(sessionReady ? 'App' : 'Login')}
-              style={styles.secondaryButton}
-            >
-              <Text style={styles.secondaryButtonText}>
-                {sessionReady ? 'Back to app' : 'Back to sign in'}
-              </Text>
-            </Pressable>
-          </View>
+          <Pressable
+            disabled={submitting}
+            onPress={() => navigation.navigate(sessionReady ? 'App' : 'Login')}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {sessionReady ? 'Back to app' : 'Back to sign in'}
+            </Text>
+          </Pressable>
         </View>
       </View>
-    </SafeAreaView>
+    </KeyboardSafeScreen>
   );
 };

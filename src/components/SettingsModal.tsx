@@ -2,12 +2,17 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 
@@ -94,83 +99,104 @@ export const SettingsModal = ({
       transparent
       visible={visible}
     >
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Settings</Text>
-            <Pressable disabled={deleting} onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.group}>
-            <Pressable onPress={handleContact} style={styles.item}>
-              <Text style={styles.itemTitle}>Contact Support</Text>
-              <Text style={styles.itemDescription}>{SUPPORT_EMAIL}</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleOpenLegalDocument('privacy')}
-              style={styles.item}
-            >
-              <Text style={styles.itemTitle}>Privacy Policy</Text>
-              <Text style={styles.itemDescription}>Review how PawCult uses data.</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleOpenLegalDocument('terms')}
-              style={styles.item}
-            >
-              <Text style={styles.itemTitle}>Terms of Service</Text>
-              <Text style={styles.itemDescription}>Review PawCult rules.</Text>
-            </Pressable>
-            {isAdmin ? (
-              <Pressable onPress={handleOpenAdminReports} style={styles.item}>
-                <Text style={styles.itemTitle}>Admin Reports</Text>
-                <Text style={styles.itemDescription}>
-                  Review user-submitted moderation reports.
-                </Text>
+      <Pressable onPress={onClose} style={styles.backdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardView}
+        >
+          <Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Settings</Text>
+              <Pressable disabled={deleting} onPress={onClose} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
               </Pressable>
-            ) : null}
-          </View>
+            </View>
 
-          <View style={styles.group}>
-            <Pressable
-              disabled={deleting}
-              onPress={onLogOut}
-              style={styles.secondaryButton}
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.secondaryButtonText}>Log Out</Text>
-            </Pressable>
-          </View>
+              <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+                <View style={styles.content}>
+                  <View style={styles.group}>
+                    <Pressable onPress={handleContact} style={styles.item}>
+                      <Text style={styles.itemTitle}>Contact Support</Text>
+                      <Text style={styles.itemDescription}>{SUPPORT_EMAIL}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleOpenLegalDocument('privacy')}
+                      style={styles.item}
+                    >
+                      <Text style={styles.itemTitle}>Privacy Policy</Text>
+                      <Text style={styles.itemDescription}>
+                        Review how PawCult uses data.
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleOpenLegalDocument('terms')}
+                      style={styles.item}
+                    >
+                      <Text style={styles.itemTitle}>Terms of Service</Text>
+                      <Text style={styles.itemDescription}>Review PawCult rules.</Text>
+                    </Pressable>
+                    {isAdmin ? (
+                      <Pressable onPress={handleOpenAdminReports} style={styles.item}>
+                        <Text style={styles.itemTitle}>Admin Reports</Text>
+                        <Text style={styles.itemDescription}>
+                          Review user-submitted moderation reports.
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
 
-          <View style={styles.dangerGroup}>
-            <Text style={styles.dangerTitle}>Delete Account</Text>
-            <Text style={styles.dangerDescription}>
-              This deletes your PawCult account and removes app data tied to your user.
-              Type DELETE to confirm.
-            </Text>
-            <TextInput
-              autoCapitalize="characters"
-              editable={!deleting}
-              onChangeText={setDeleteConfirmation}
-              placeholder="DELETE"
-              placeholderTextColor="#94a3b8"
-              style={styles.input}
-              value={deleteConfirmation}
-            />
-            <Pressable
-              disabled={deleting}
-              onPress={handleDeleteAccount}
-              style={[styles.deleteButton, deleting ? styles.buttonDisabled : null]}
-            >
-              {deleting ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.deleteButtonText}>Delete Account</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
+                  <View style={styles.group}>
+                    <Pressable
+                      disabled={deleting}
+                      onPress={onLogOut}
+                      style={styles.secondaryButton}
+                    >
+                      <Text style={styles.secondaryButtonText}>Log Out</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.dangerGroup}>
+                    <Text style={styles.dangerTitle}>Delete Account</Text>
+                    <Text style={styles.dangerDescription}>
+                      This deletes your PawCult account and removes app data tied to your
+                      user. Type DELETE to confirm.
+                    </Text>
+                    <TextInput
+                      autoCapitalize="characters"
+                      editable={!deleting}
+                      onChangeText={setDeleteConfirmation}
+                      placeholder="DELETE"
+                      placeholderTextColor="#94a3b8"
+                      style={styles.input}
+                      value={deleteConfirmation}
+                    />
+                    <Pressable
+                      disabled={deleting}
+                      onPress={handleDeleteAccount}
+                      style={[
+                        styles.deleteButton,
+                        deleting ? styles.buttonDisabled : null,
+                      ]}
+                    >
+                      {deleting ? (
+                        <ActivityIndicator color="#ffffff" />
+                      ) : (
+                        <Text style={styles.deleteButtonText}>Delete Account</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </ScrollView>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Pressable>
     </Modal>
   );
 };
@@ -181,18 +207,29 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  keyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   sheet: {
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    gap: 16,
     maxHeight: '92%',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  scrollContent: {
+    paddingBottom: 56,
+  },
+  content: {
+    gap: 16,
   },
   title: {
     color: '#0f172a',

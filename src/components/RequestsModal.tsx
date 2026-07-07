@@ -663,8 +663,8 @@ export const RequestsModal = ({
       transparent
       visible={visible}
     >
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
+      <Pressable onPress={onClose} style={styles.backdrop}>
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={styles.title}>Requests</Text>
@@ -708,8 +708,8 @@ export const RequestsModal = ({
                 ? renderOwnerRequests()
                 : renderFriendRequests()}
           </ScrollView>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };

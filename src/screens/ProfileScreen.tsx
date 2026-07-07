@@ -122,17 +122,12 @@ export const ProfileScreen = () => {
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [unblockingUserIds, setUnblockingUserIds] = useState<string[]>([]);
 
-  const petSummary = useMemo(() => {
-    if (loading) {
-      return 'Loading pets...';
-    }
+  const profileSummary = useMemo(() => {
+    const petLabel = pets.length === 1 ? 'Pet' : 'Pets';
+    const friendLabel = friends.length === 1 ? 'Friend' : 'Friends';
 
-    if (pets.length === 0) {
-      return 'No pets added yet';
-    }
-
-    return `${pets.length} ${pets.length === 1 ? 'pet' : 'pets'} on your profile`;
-  }, [loading, pets.length]);
+    return `${pets.length} ${petLabel} · ${friends.length} ${friendLabel}`;
+  }, [friends.length, pets.length]);
 
   const otherPetParents = useMemo(
     () => petParents.filter((parent) => !parent.isCurrentUser),
@@ -263,10 +258,12 @@ export const ProfileScreen = () => {
 
     try {
       const result = await createPetOwnerInvite(selectedPet.id, normalizedEmail);
-      setInviteMessage(getPetOwnerInviteMessage(result.status, normalizedEmail));
+      const message = getPetOwnerInviteMessage(result.status, normalizedEmail);
+      setInviteMessage(message);
 
       if (result.status === 'sent') {
-        setInviteEmail('');
+        closePetDetail();
+        Alert.alert('Invite sent', message);
       }
     } catch (inviteError) {
       const message =
@@ -307,10 +304,18 @@ export const ProfileScreen = () => {
 
     try {
       const result = await sendFriendRequestByEmail(normalizedEmail);
-      setFriendRequestMessage(getFriendRequestMessage(result.status, normalizedEmail));
+      const message = getFriendRequestMessage(result.status, normalizedEmail);
+      setFriendRequestMessage(message);
 
       if (result.status === 'accepted' || result.status === 'already_friends') {
         await fetchFriends();
+      }
+
+      if (result.status === 'sent') {
+        setIsAddFriendOpen(false);
+        setFriendEmail('');
+        setFriendRequestMessage(null);
+        Alert.alert('Friend request sent', message);
       }
     } catch (friendError) {
       const message =
@@ -415,96 +420,87 @@ export const ProfileScreen = () => {
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
-      <View style={styles.heroCard}>
-        <View style={styles.heroBadge}>
-          <Text style={styles.heroBadgeIcon}>◉</Text>
-        </View>
+      <View style={styles.compactHeader}>
         <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Build your pet family on PawCult.</Text>
-
-        <View style={styles.countPill}>
-          <Text style={styles.countPillText}>{petSummary}</Text>
-        </View>
+        <Text style={styles.summaryText}>{profileSummary}</Text>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingCard}>
-          <ActivityIndicator color="#8b5cf6" size="large" />
-          <Text style={styles.loadingText}>Loading your pets...</Text>
+      <View style={styles.sectionGroup}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Pets ({pets.length})</Text>
         </View>
-      ) : error ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyBadge}>
-            <Text style={styles.emptyBadgeIcon}>!</Text>
+
+        {loading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color="#8b5cf6" />
+            <Text style={styles.loadingText}>Loading your pets...</Text>
           </View>
-          <Text style={styles.emptyTitle}>Could not load pets</Text>
-          <Text style={styles.emptyDescription}>{error}</Text>
-        </View>
-      ) : pets.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyBadge}>
-            <Text style={styles.emptyBadgeIcon}>🐾</Text>
+        ) : error ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Could not load pets</Text>
+            <Text style={styles.emptyDescription}>{error}</Text>
           </View>
-          <Text style={styles.emptyTitle}>No pets yet</Text>
-          <Text style={styles.emptyDescription}>
-            Add your first pet profile to start shaping your mobile profile experience.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.petList}>
-          {pets.map((pet) => (
-            <Pressable
-              key={pet.id}
-              onPress={() => openPetDetail(pet)}
-              style={({ pressed }) => [
-                styles.petCard,
-                pressed ? styles.cardPressed : null,
-              ]}
-            >
-              {pet.profilePhotoUri ? (
-                <Image source={{ uri: pet.profilePhotoUri }} style={styles.petImage} />
-              ) : (
-                <View style={styles.petImagePlaceholder}>
-                  <Text style={styles.petImagePlaceholderIcon}>🐾</Text>
-                </View>
-              )}
-              <View style={styles.petBody}>
-                <View style={styles.petHeader}>
+        ) : pets.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No pets yet</Text>
+            <Text style={styles.emptyDescription}>
+              Add your first pet profile to start shaping your mobile profile.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.petList}>
+            {pets.map((pet) => (
+              <Pressable
+                key={pet.id}
+                onPress={() => openPetDetail(pet)}
+                style={({ pressed }) => [
+                  styles.petCard,
+                  pressed ? styles.cardPressed : null,
+                ]}
+              >
+                {pet.profilePhotoUri ? (
+                  <Image source={{ uri: pet.profilePhotoUri }} style={styles.petImage} />
+                ) : (
+                  <View style={styles.petImagePlaceholder}>
+                    <Text style={styles.petImagePlaceholderIcon}>🐾</Text>
+                  </View>
+                )}
+                <View style={styles.petBody}>
                   <View style={styles.petNameRow}>
-                    <Text style={styles.petName}>{pet.name}</Text>
+                    <Text numberOfLines={1} style={styles.petName}>{pet.name}</Text>
                     {pet.isShared ? (
                       <View style={styles.sharedBadge}>
                         <Text style={styles.sharedBadgeText}>Shared</Text>
                       </View>
                     ) : null}
                   </View>
-                  <Text style={styles.petBreed}>{pet.breed}</Text>
+                  <Text numberOfLines={1} style={styles.petBreed}>{pet.breed}</Text>
+                  {pet.bio ? (
+                    <Text numberOfLines={2} style={styles.petBio}>
+                      {pet.bio}
+                    </Text>
+                  ) : null}
                 </View>
-                {pet.bio ? (
-                  <Text numberOfLines={3} style={styles.petBio}>
-                    {pet.bio}
-                  </Text>
-                ) : (
-                  <Text style={styles.petBioPlaceholder}>No bio yet.</Text>
-                )}
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
+              </Pressable>
+            ))}
+          </View>
+        )}
 
-      <View style={styles.friendsSection}>
+        <Pressable
+          onPress={() => navigation.navigate('CreatePet')}
+          style={({ pressed }) => [
+            styles.addPetButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+        >
+          <Text style={styles.addPetButtonIcon}>＋</Text>
+          <Text style={styles.addPetButtonText}>Add Pet</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionGroup}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My Friends</Text>
-          <Pressable
-            onPress={openAddFriend}
-            style={({ pressed }) => [
-              styles.smallButton,
-              pressed ? styles.buttonPressed : null,
-            ]}
-          >
-            <Text style={styles.smallButtonText}>Add Friend</Text>
-          </Pressable>
+          <Text style={styles.sectionTitle}>Friends ({friends.length})</Text>
         </View>
 
         {friendsLoading ? (
@@ -547,6 +543,16 @@ export const ProfileScreen = () => {
             ))}
           </View>
         )}
+
+        <Pressable
+          onPress={openAddFriend}
+          style={({ pressed }) => [
+            styles.addFriendButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+        >
+          <Text style={styles.addFriendButtonText}>Add Friend</Text>
+        </Pressable>
       </View>
 
       {blockedUsers.length > 0 ? (
@@ -601,14 +607,6 @@ export const ProfileScreen = () => {
           </View>
         </View>
       ) : null}
-
-      <Pressable
-        onPress={() => navigation.navigate('CreatePet')}
-        style={({ pressed }) => [styles.addPetButton, pressed ? styles.buttonPressed : null]}
-      >
-        <Text style={styles.addPetButtonIcon}>＋</Text>
-        <Text style={styles.addPetButtonText}>Add Pet</Text>
-      </Pressable>
 
       <Modal
         animationType="slide"
@@ -1036,105 +1034,63 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 16,
+    gap: 18,
     padding: 20,
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
-  heroCard: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
-    borderRadius: 28,
-    borderWidth: 1,
-    padding: 24,
-  },
-  heroBadge: {
-    alignItems: 'center',
-    backgroundColor: '#ede9fe',
-    borderRadius: 40,
-    height: 80,
-    justifyContent: 'center',
-    width: 80,
-  },
-  heroBadgeIcon: {
-    color: '#8b5cf6',
-    fontSize: 40,
-    fontWeight: '700',
+  compactHeader: {
+    gap: 4,
+    paddingTop: 2,
   },
   title: {
     color: '#0f172a',
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
-    marginTop: 16,
   },
-  subtitle: {
-    color: '#475569',
-    fontSize: 16,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  countPill: {
-    backgroundColor: '#f5f3ff',
-    borderRadius: 999,
-    marginTop: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  countPillText: {
-    color: '#6d28d9',
-    fontSize: 13,
+  summaryText: {
+    color: '#64748b',
+    fontSize: 14,
     fontWeight: '600',
   },
   loadingCard: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
-    borderRadius: 28,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 28,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
   },
   loadingText: {
     color: '#64748b',
     fontSize: 15,
     lineHeight: 22,
-    marginTop: 12,
-    textAlign: 'center',
   },
   emptyCard: {
-    alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
-    borderRadius: 28,
+    borderRadius: 18,
     borderStyle: 'dashed',
     borderWidth: 1,
-    padding: 28,
-  },
-  emptyBadge: {
-    alignItems: 'center',
-    backgroundColor: '#faf5ff',
-    borderRadius: 36,
-    height: 72,
-    justifyContent: 'center',
-    width: 72,
-  },
-  emptyBadgeIcon: {
-    fontSize: 28,
+    gap: 6,
+    padding: 16,
   },
   emptyTitle: {
     color: '#0f172a',
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '700',
-    marginTop: 16,
   },
   emptyDescription: {
     color: '#64748b',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
-    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
   },
   petList: {
-    gap: 14,
+    gap: 10,
+  },
+  sectionGroup: {
+    gap: 12,
   },
   friendsSection: {
     backgroundColor: '#ffffff',
@@ -1168,33 +1124,37 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   petCard: {
+    alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    overflow: 'hidden',
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
   },
   cardPressed: {
     opacity: 0.92,
     transform: [{ scale: 0.995 }],
   },
   petImage: {
-    height: 220,
-    width: '100%',
+    borderRadius: 14,
+    height: 82,
+    width: 82,
   },
   petImagePlaceholder: {
     alignItems: 'center',
     backgroundColor: '#ede9fe',
-    height: 220,
+    borderRadius: 14,
+    height: 82,
     justifyContent: 'center',
+    width: 82,
   },
   petImagePlaceholderIcon: {
-    fontSize: 44,
+    fontSize: 30,
   },
   petBody: {
-    padding: 18,
-  },
-  petHeader: {
+    flex: 1,
     gap: 4,
   },
   petNameRow: {
@@ -1206,7 +1166,7 @@ const styles = StyleSheet.create({
   petName: {
     color: '#0f172a',
     flexShrink: 1,
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
   },
   sharedBadge: {
@@ -1224,21 +1184,14 @@ const styles = StyleSheet.create({
   },
   petBreed: {
     color: '#6d28d9',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   petBio: {
     color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  petBioPlaceholder: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 20,
-    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
   addPetButton: {
     alignItems: 'center',
@@ -1246,7 +1199,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     flexDirection: 'row',
     justifyContent: 'center',
-    minHeight: 54,
+    minHeight: 50,
     paddingHorizontal: 20,
     width: '100%',
   },
@@ -1258,6 +1211,22 @@ const styles = StyleSheet.create({
   },
   addPetButtonText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  addFriendButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  addFriendButtonText: {
+    color: '#334155',
     fontSize: 16,
     fontWeight: '700',
   },
