@@ -7,6 +7,7 @@ type MoreMenuModalProps = {
   onOpenAdminReports: () => void;
   onOpenRequests: () => void;
   onOpenSettings: () => void;
+  requestNotificationCount?: number;
   topInset: number;
   visible: boolean;
 };
@@ -18,9 +19,13 @@ export const MoreMenuModal = ({
   onOpenAdminReports,
   onOpenRequests,
   onOpenSettings,
+  requestNotificationCount = 0,
   topInset,
   visible,
 }: MoreMenuModalProps) => {
+  const badgeLabel =
+    requestNotificationCount > 99 ? '99+' : String(requestNotificationCount);
+
   return (
     <Modal
       animationType="fade"
@@ -42,6 +47,11 @@ export const MoreMenuModal = ({
           >
             <Text style={styles.itemIcon}>☰</Text>
             <Text style={styles.itemText}>Requests</Text>
+            {requestNotificationCount > 0 ? (
+              <View style={styles.requestBadge}>
+                <Text style={styles.requestBadgeText}>{badgeLabel}</Text>
+              </View>
+            ) : null}
           </Pressable>
           <View style={styles.separator} />
           <Pressable
@@ -122,8 +132,23 @@ const styles = StyleSheet.create({
   },
   itemText: {
     color: '#111827',
+    flex: 1,
     fontSize: 15,
     fontWeight: '500',
+  },
+  requestBadge: {
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    borderRadius: 999,
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  requestBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   separator: {
     backgroundColor: '#f3f4f6',

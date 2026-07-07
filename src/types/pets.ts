@@ -44,6 +44,23 @@ export type PetOwnerInvite = {
   expiresAt: string;
 };
 
+export type SendPetOwnerInviteStatus =
+  | 'already_owner'
+  | 'no_account'
+  | 'request_pending'
+  | 'self'
+  | 'sent';
+
+export type SendPetOwnerInviteResult = {
+  status: SendPetOwnerInviteStatus;
+  inviteId: string | null;
+  invitedUserId: string | null;
+  invitedDisplayName: string | null;
+  invitedEmail: string;
+  token: string | null;
+  expiresAt: string | null;
+};
+
 export type PetOwnerInvitePreview = {
   petName: string;
   inviterDisplayName: string | null;

@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(39);
+SELECT plan(44);
 
 create temp table test_ids (
   key text primary key,
@@ -13,6 +13,7 @@ values
   ('stranger', '00000000-0000-0000-0000-000000000003'),
   ('new_owner', '00000000-0000-0000-0000-000000000004'),
   ('decliner', '00000000-0000-0000-0000-000000000005'),
+  ('cancel_owner', '00000000-0000-0000-0000-000000000006'),
   ('park', '00000000-0000-0000-0000-000000000010'),
   ('robiko', '00000000-0000-0000-0000-000000000020'),
   ('private_pet', '00000000-0000-0000-0000-000000000021');
@@ -76,6 +77,30 @@ values
     'authenticated',
     'authenticated',
     'decliner@example.test',
+    'test-password',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    (select id from test_ids where key = 'new_owner'),
+    'authenticated',
+    'authenticated',
+    'new-owner@example.test',
+    'test-password',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    (select id from test_ids where key = 'cancel_owner'),
+    'authenticated',
+    'authenticated',
+    'cancel@example.test',
     'test-password',
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -202,6 +227,18 @@ select is(
 
 select is(
   (
+    select status
+    from public.create_pet_owner_invite(
+      (select id from test_ids where key = 'robiko'),
+      'caner@example.test'
+    )
+  ),
+  'request_pending',
+  'existing pending pet owner invite returns request pending status'
+);
+
+select is(
+  (
     select token
     from public.create_pet_owner_invite(
       (select id from test_ids where key = 'robiko'),
@@ -210,6 +247,40 @@ select is(
   ),
   (select token from invite_tokens where key = 'caner'),
   'existing pending invite is reused'
+);
+
+select is(
+  (
+    select status
+    from public.create_pet_owner_invite(
+      (select id from test_ids where key = 'robiko'),
+      'missing-owner@example.test'
+    )
+  ),
+  'no_account',
+  'unknown pet owner email returns no account status'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.pet_owner_invites
+    where invited_email = 'missing-owner@example.test'
+  ),
+  0,
+  'unknown pet owner email does not create an invite'
+);
+
+select is(
+  (
+    select status
+    from public.create_pet_owner_invite(
+      (select id from test_ids where key = 'robiko'),
+      'ezgi@example.test'
+    )
+  ),
+  'self',
+  'pet owner cannot invite themselves'
 );
 
 insert into invite_tokens (key, token)
@@ -362,31 +433,6 @@ select is(
   'invited owner can see the shared pet after accepting'
 );
 
-insert into auth.users (
-  id,
-  aud,
-  role,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  raw_app_meta_data,
-  raw_user_meta_data,
-  created_at,
-  updated_at
-)
-values (
-  (select id from test_ids where key = 'new_owner'),
-  'authenticated',
-  'authenticated',
-  'new-owner@example.test',
-  'test-password',
-  now(),
-  '{"provider":"email","providers":["email"]}'::jsonb,
-  '{}'::jsonb,
-  now(),
-  now()
-);
-
 reset role;
 set local role authenticated;
 select pg_temp.authenticate_as(
@@ -399,7 +445,7 @@ select is(
     (select token from invite_tokens where key = 'new_owner')
   ),
   (select id from test_ids where key = 'robiko'),
-  'user without account can sign up later, return to invite, and accept'
+  'existing account invitee can accept by token'
 );
 
 select is(
@@ -446,6 +492,18 @@ set local role authenticated;
 select pg_temp.authenticate_as(
   (select id from test_ids where key = 'ezgi'),
   'ezgi@example.test'
+);
+
+select is(
+  (
+    select status
+    from public.create_pet_owner_invite(
+      (select id from test_ids where key = 'robiko'),
+      'caner@example.test'
+    )
+  ),
+  'already_owner',
+  'active pet owner cannot receive a duplicate pet owner invite'
 );
 
 select is(

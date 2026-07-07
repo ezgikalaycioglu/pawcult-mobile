@@ -6,7 +6,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -21,7 +20,7 @@ import { useModeration } from '../context/ModerationContext';
 import { usePetProfiles } from '../context/PetProfilesContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { FriendProfile, FriendSummary } from '../types/friends';
-import { MobilePetProfile, PetOwnerInvite, PetOwnerSummary } from '../types/pets';
+import { MobilePetProfile, PetOwnerSummary } from '../types/pets';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -60,6 +59,23 @@ const getFriendRequestMessage = (status: string, email: string) => {
   }
 };
 
+const getPetOwnerInviteMessage = (status: string, email: string) => {
+  switch (status) {
+    case 'already_owner':
+      return 'This user is already a pet owner.';
+    case 'no_account':
+      return 'No PawCult account found for this email.';
+    case 'request_pending':
+      return 'A pet owner invite is already pending.';
+    case 'self':
+      return 'You cannot invite yourself as another owner.';
+    case 'sent':
+      return `Invite sent to ${email}.`;
+    default:
+      return 'Pet owner invite updated.';
+  }
+};
+
 export const ProfileScreen = () => {
   const {
     fetchFriends,
@@ -93,7 +109,7 @@ export const ProfileScreen = () => {
   const [editBio, setEditBio] = useState('');
   const [savingPet, setSavingPet] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [invite, setInvite] = useState<PetOwnerInvite | null>(null);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [friendEmail, setFriendEmail] = useState('');
@@ -105,10 +121,6 @@ export const ProfileScreen = () => {
   const [friendProfileError, setFriendProfileError] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [unblockingUserIds, setUnblockingUserIds] = useState<string[]>([]);
-
-  const inviteLink = invite
-    ? `https://pawcult.app/invite/${invite.token}`
-    : null;
 
   const petSummary = useMemo(() => {
     if (loading) {
@@ -173,7 +185,7 @@ export const ProfileScreen = () => {
     setEditBio(pet.bio ?? '');
     setEditing(false);
     setInviteEmail('');
-    setInvite(null);
+    setInviteMessage(null);
   };
 
   const closePetDetail = () => {
@@ -183,7 +195,7 @@ export const ProfileScreen = () => {
     setEditing(false);
     setSavingPet(false);
     setInviteEmail('');
-    setInvite(null);
+    setInviteMessage(null);
     setCreatingInvite(false);
   };
 
@@ -247,32 +259,25 @@ export const ProfileScreen = () => {
     }
 
     setCreatingInvite(true);
+    setInviteMessage(null);
 
     try {
-      const createdInvite = await createPetOwnerInvite(selectedPet.id, normalizedEmail);
-      setInvite(createdInvite);
+      const result = await createPetOwnerInvite(selectedPet.id, normalizedEmail);
+      setInviteMessage(getPetOwnerInviteMessage(result.status, normalizedEmail));
+
+      if (result.status === 'sent') {
+        setInviteEmail('');
+      }
     } catch (inviteError) {
       const message =
         inviteError instanceof Error
           ? inviteError.message
-          : 'Unable to create this invite right now.';
+          : 'Unable to send this invite right now.';
 
       Alert.alert('Invite failed', message);
     } finally {
       setCreatingInvite(false);
     }
-  };
-
-  const handleShareInvite = async () => {
-    if (!inviteLink || !invite) {
-      return;
-    }
-
-    await Share.share({
-      message: `You have been invited to share ${selectedPet?.name ?? 'a pet'} on PawCult: ${inviteLink}`,
-      url: inviteLink,
-      title: 'PawCult pet owner invite',
-    });
   };
 
   const openAddFriend = () => {
@@ -795,70 +800,37 @@ export const ProfileScreen = () => {
 
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Invite another owner</Text>
-                    {invite ? (
-                      <View style={styles.form}>
-                        <Text style={styles.helperText}>
-                          Invite created for {invite.invitedEmail}
-                        </Text>
-                        <View style={styles.inviteLinkBox}>
-                          <Text selectable style={styles.inviteLinkText}>
-                            {inviteLink}
-                          </Text>
-                        </View>
-                        <View style={styles.rowActions}>
-                          <Pressable
-                            onPress={() => {
-                              setInvite(null);
-                              setInviteEmail('');
-                            }}
-                            style={({ pressed }) => [
-                              styles.secondaryButton,
-                              pressed ? styles.buttonPressed : null,
-                            ]}
-                          >
-                            <Text style={styles.secondaryButtonText}>New invite</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={handleShareInvite}
-                            style={({ pressed }) => [
-                              styles.primaryButton,
-                              pressed ? styles.buttonPressed : null,
-                            ]}
-                          >
-                            <Text style={styles.primaryButtonText}>Share invite</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ) : (
-                      <View style={styles.form}>
-                        <TextInput
-                          autoCapitalize="none"
-                          autoComplete="email"
-                          editable={!creatingInvite}
-                          keyboardType="email-address"
-                          onChangeText={setInviteEmail}
-                          placeholder="Email address"
-                          placeholderTextColor="#94a3b8"
-                          style={styles.input}
-                          value={inviteEmail}
-                        />
-                        <Pressable
-                          disabled={creatingInvite}
-                          onPress={handleCreateInvite}
-                          style={({ pressed }) => [
-                            styles.primaryButton,
-                            creatingInvite ? styles.buttonDisabled : null,
-                            pressed && !creatingInvite ? styles.buttonPressed : null,
-                          ]}
-                        >
-                          {creatingInvite ? (
-                            <ActivityIndicator color="#ffffff" />
-                          ) : (
-                            <Text style={styles.primaryButtonText}>Create invite</Text>
-                          )}
-                        </Pressable>
-                      </View>
-                    )}
+                    <View style={styles.form}>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        editable={!creatingInvite}
+                        keyboardType="email-address"
+                        onChangeText={setInviteEmail}
+                        placeholder="Email address"
+                        placeholderTextColor="#94a3b8"
+                        style={styles.input}
+                        value={inviteEmail}
+                      />
+                      {inviteMessage ? (
+                        <Text style={styles.helperText}>{inviteMessage}</Text>
+                      ) : null}
+                      <Pressable
+                        disabled={creatingInvite}
+                        onPress={handleCreateInvite}
+                        style={({ pressed }) => [
+                          styles.primaryButton,
+                          creatingInvite ? styles.buttonDisabled : null,
+                          pressed && !creatingInvite ? styles.buttonPressed : null,
+                        ]}
+                      >
+                        {creatingInvite ? (
+                          <ActivityIndicator color="#ffffff" />
+                        ) : (
+                          <Text style={styles.primaryButtonText}>Send invite</Text>
+                        )}
+                      </Pressable>
+                    </View>
                   </View>
                 </>
               ) : null}
@@ -1529,18 +1501,6 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 14,
     lineHeight: 20,
-  },
-  inviteLinkBox: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-  },
-  inviteLinkText: {
-    color: '#334155',
-    fontSize: 13,
-    lineHeight: 19,
   },
   sheetFooter: {
     borderTopColor: '#e2e8f0',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,14 +10,18 @@ import { AdminReportsModal } from '../components/AdminReportsModal';
 import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { useAuth } from '../context/AuthContext';
+import { useFriends } from '../context/FriendsContext';
 import { useModeration } from '../context/ModerationContext';
+import { usePetProfiles } from '../context/PetProfilesContext';
 import { LegalDocumentType } from '../legal/legalText';
 import { CheckInScreen } from './CheckInScreen';
 import { ProfileScreen } from './ProfileScreen';
 
 export const SignedInShell = () => {
-  const { deleteAccount, signOut } = useAuth();
+  const { deleteAccount, signOut, user } = useAuth();
+  const { fetchFriendRequests } = useFriends();
   const { isAdmin } = useModeration();
+  const { fetchPetOwnerRequests } = usePetProfiles();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<MobileTabKey>('check-in');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -27,6 +31,41 @@ export const SignedInShell = () => {
   const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(
     null
   );
+  const [requestNotificationCounts, setRequestNotificationCounts] = useState({
+    friends: 0,
+    petOwners: 0,
+  });
+
+  const totalRequestNotificationCount =
+    requestNotificationCounts.friends + requestNotificationCounts.petOwners;
+
+  const refreshRequestNotifications = useCallback(async () => {
+    if (!user?.id) {
+      setRequestNotificationCounts({ friends: 0, petOwners: 0 });
+      return;
+    }
+
+    try {
+      const [petOwnerRequests, friendRequests] = await Promise.all([
+        fetchPetOwnerRequests('incoming'),
+        fetchFriendRequests('incoming'),
+      ]);
+
+      setRequestNotificationCounts({
+        friends: friendRequests.filter((request) => request.status === 'pending')
+          .length,
+        petOwners: petOwnerRequests.filter(
+          (request) => request.status === 'pending'
+        ).length,
+      });
+    } catch {
+      setRequestNotificationCounts({ friends: 0, petOwners: 0 });
+    }
+  }, [fetchFriendRequests, fetchPetOwnerRequests, user?.id]);
+
+  useEffect(() => {
+    void refreshRequestNotifications();
+  }, [refreshRequestNotifications]);
 
   const handleSignOut = async () => {
     try {
@@ -47,7 +86,14 @@ export const SignedInShell = () => {
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
-        <MobileTopNav onOpenMenu={() => setIsMenuOpen(true)} topInset={insets.top} />
+        <MobileTopNav
+          notificationCount={totalRequestNotificationCount}
+          onOpenMenu={() => {
+            setIsMenuOpen(true);
+            void refreshRequestNotifications();
+          }}
+          topInset={insets.top}
+        />
 
         <View style={styles.content}>
           {activeTab === 'check-in' ? <CheckInScreen /> : <ProfileScreen />}
@@ -65,14 +111,20 @@ export const SignedInShell = () => {
         onClose={() => setIsMenuOpen(false)}
         onLogOut={handleSignOut}
         onOpenAdminReports={() => setIsAdminReportsOpen(true)}
-        onOpenRequests={() => setIsRequestsOpen(true)}
+        onOpenRequests={() => {
+          setIsRequestsOpen(true);
+          void refreshRequestNotifications();
+        }}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        requestNotificationCount={totalRequestNotificationCount}
         topInset={insets.top}
         visible={isMenuOpen}
       />
 
       <RequestsModal
         onClose={() => setIsRequestsOpen(false)}
+        onRequestsChanged={refreshRequestNotifications}
+        requestNotificationCounts={requestNotificationCounts}
         visible={isRequestsOpen}
       />
 

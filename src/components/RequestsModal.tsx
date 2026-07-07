@@ -5,7 +5,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -23,7 +22,12 @@ import {
 } from '../types/pets';
 
 type RequestsModalProps = {
+  onRequestsChanged?: () => void;
   onClose: () => void;
+  requestNotificationCounts?: {
+    friends: number;
+    petOwners: number;
+  };
   visible: boolean;
 };
 
@@ -109,9 +113,6 @@ const formatDate = (date: string | null) => {
   }).format(new Date(date));
 };
 
-const getInviteLink = (token: string | null) =>
-  token ? `https://pawcult.app/invite/${token}` : null;
-
 const StatusBadge = ({ status }: { status: BadgeStatus }) => {
   const statusStyle = statusStyles[status];
 
@@ -124,7 +125,12 @@ const StatusBadge = ({ status }: { status: BadgeStatus }) => {
   );
 };
 
-export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
+export const RequestsModal = ({
+  onClose,
+  onRequestsChanged,
+  requestNotificationCounts = { friends: 0, petOwners: 0 },
+  visible,
+}: RequestsModalProps) => {
   const { fetchDogParks, loading: parksLoading, parkRequests } = useDogParks();
   const {
     acceptPetOwnerRequest,
@@ -274,6 +280,7 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
       }
 
       await loadOwnerRequests(ownerDirection);
+      onRequestsChanged?.();
     } catch (error) {
       const message =
         error instanceof Error
@@ -284,20 +291,6 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
     } finally {
       setActiveOwnerActionId(null);
     }
-  };
-
-  const handleShareOwnerInvite = async (request: PetOwnerRequest) => {
-    const inviteLink = getInviteLink(request.token);
-
-    if (!inviteLink) {
-      return;
-    }
-
-    await Share.share({
-      message: `You have been invited to share ${request.petName} on PawCult: ${inviteLink}`,
-      url: inviteLink,
-      title: 'PawCult pet owner invite',
-    });
   };
 
   const handleFriendAction = async (
@@ -316,6 +309,7 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
       }
 
       await loadFriendRequests(friendDirection);
+      onRequestsChanged?.();
     } catch (error) {
       const message =
         error instanceof Error
@@ -332,6 +326,12 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
     <View style={styles.segmentedControl}>
       {topTabs.map((tab) => {
         const selected = activeTab === tab.key;
+        const badgeCount =
+          tab.key === 'petOwners'
+            ? requestNotificationCounts.petOwners
+            : tab.key === 'friends'
+              ? requestNotificationCounts.friends
+              : 0;
 
         return (
           <Pressable
@@ -343,15 +343,22 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
               pressed ? styles.buttonPressed : null,
             ]}
           >
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.segmentButtonText,
-                selected ? styles.segmentButtonTextActive : null,
-              ]}
-            >
-              {tab.label}
-            </Text>
+            <View style={styles.segmentLabelRow}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.segmentButtonText,
+                  selected ? styles.segmentButtonTextActive : null,
+                ]}
+              >
+                {tab.label}
+              </Text>
+              {badgeCount > 0 ? (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{badgeCount}</Text>
+                </View>
+              ) : null}
+            </View>
           </Pressable>
         );
       })}
@@ -475,19 +482,6 @@ export const RequestsModal = ({ onClose, visible }: RequestsModalProps) => {
             <Text style={styles.secondaryActionText}>Cancel invite</Text>
           )}
         </Pressable>
-        {request.token ? (
-          <Pressable
-            disabled={activeOwnerActionId !== null}
-            onPress={() => void handleShareOwnerInvite(request)}
-            style={({ pressed }) => [
-              styles.primaryActionButton,
-              activeOwnerActionId !== null ? styles.buttonDisabled : null,
-              pressed ? styles.buttonPressed : null,
-            ]}
-          >
-            <Text style={styles.primaryActionText}>Share link</Text>
-          </Pressable>
-        ) : null}
       </View>
     );
   };
@@ -797,6 +791,26 @@ const styles = StyleSheet.create({
   },
   segmentButtonTextActive: {
     color: '#6d28d9',
+  },
+  segmentLabelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+  },
+  tabBadge: {
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    borderRadius: 999,
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  tabBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   secondarySegmentedControl: {
     alignSelf: 'flex-start',

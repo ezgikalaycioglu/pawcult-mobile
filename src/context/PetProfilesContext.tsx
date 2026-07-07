@@ -11,11 +11,11 @@ import { supabase } from '../lib/supabase';
 import {
   CreateMobilePetInput,
   MobilePetProfile,
-  PetOwnerInvite,
   PetOwnerInvitePreview,
   PetOwnerRequest,
   PetOwnerRequestDirection,
   PetOwnerSummary,
+  SendPetOwnerInviteResult,
   UpdateMobilePetInput,
 } from '../types/pets';
 import { useAuth } from './AuthContext';
@@ -24,7 +24,10 @@ type PetProfilesContextType = {
   acceptPetOwnerInvite: (token: string) => Promise<string>;
   acceptPetOwnerRequest: (inviteId: string) => Promise<string>;
   cancelPetOwnerInvite: (inviteId: string) => Promise<string>;
-  createPetOwnerInvite: (petId: string, invitedEmail: string) => Promise<PetOwnerInvite>;
+  createPetOwnerInvite: (
+    petId: string,
+    invitedEmail: string
+  ) => Promise<SendPetOwnerInviteResult>;
   createPet: (input: CreateMobilePetInput) => Promise<void>;
   creating: boolean;
   declinePetOwnerRequest: (inviteId: string) => Promise<string>;
@@ -60,11 +63,14 @@ type PetOwnerCountRow = {
   pet_id: string;
 };
 
-type PetOwnerInviteRow = {
-  id: string;
-  token: string;
+type SendPetOwnerInviteResultRow = {
+  status: SendPetOwnerInviteResult['status'];
+  invite_id: string | null;
+  invited_user_id: string | null;
+  invited_display_name: string | null;
   invited_email: string;
-  expires_at: string;
+  token: string | null;
+  expires_at: string | null;
 };
 
 type PetOwnerInvitePreviewRow = {
@@ -139,10 +145,15 @@ const getRpcRow = <TRow,>(data: TRow | TRow[] | null): TRow | null => {
   return data;
 };
 
-const mapInviteRow = (row: PetOwnerInviteRow): PetOwnerInvite => ({
-  id: row.id,
-  token: row.token,
+const mapSendPetOwnerInviteResultRow = (
+  row: SendPetOwnerInviteResultRow
+): SendPetOwnerInviteResult => ({
+  status: row.status,
+  inviteId: row.invite_id,
+  invitedUserId: row.invited_user_id,
+  invitedDisplayName: row.invited_display_name,
   invitedEmail: row.invited_email,
+  token: row.token,
   expiresAt: row.expires_at,
 });
 
@@ -438,7 +449,7 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
   const createPetOwnerInvite = async (
     petId: string,
     invitedEmail: string
-  ): Promise<PetOwnerInvite> => {
+  ): Promise<SendPetOwnerInviteResult> => {
     if (!user?.id) {
       throw new Error('User session is required to invite another owner.');
     }
@@ -455,12 +466,14 @@ export const PetProfilesProvider = ({ children }: { children: ReactNode }) => {
       throw inviteError;
     }
 
-    const row = getRpcRow(data as PetOwnerInviteRow | PetOwnerInviteRow[] | null);
+    const row = getRpcRow(
+      data as SendPetOwnerInviteResultRow | SendPetOwnerInviteResultRow[] | null
+    );
     if (!row) {
-      throw new Error('Unable to create invite right now.');
+      throw new Error('Unable to send invite right now.');
     }
 
-    return mapInviteRow(row);
+    return mapSendPetOwnerInviteResultRow(row);
   };
 
   const getPetOwnerInvitePreview = async (
