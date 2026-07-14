@@ -17,6 +17,7 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+pawcult-keystore.jsk
 
 # Metro
 .metro-health-check*
