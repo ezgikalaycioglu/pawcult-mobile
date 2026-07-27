@@ -36,6 +36,33 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const PENDING_INVITE_TOKEN_KEY = 'pawcult.pendingInviteToken';
 
+const getFunctionErrorMessage = async (error: unknown) => {
+  const context =
+    typeof error === 'object' && error !== null && 'context' in error
+      ? (error as { context?: unknown }).context
+      : null;
+
+  const clone =
+    typeof context === 'object' && context !== null && 'clone' in context
+      ? (context as { clone?: unknown }).clone
+      : null;
+
+  if (typeof clone !== 'function') {
+    return null;
+  }
+
+  try {
+    const response = clone.call(context) as Response;
+    const body = (await response.json()) as { error?: unknown };
+
+    return typeof body.error === 'string' && body.error.length > 0
+      ? body.error
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -192,6 +219,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (error) {
+          const message = await getFunctionErrorMessage(error);
+
+          if (message) {
+            throw new Error(message);
+          }
+
           throw error;
         }
 

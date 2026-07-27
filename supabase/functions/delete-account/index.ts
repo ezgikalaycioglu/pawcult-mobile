@@ -14,6 +14,24 @@ const getEnv = (name: string) => {
   return value;
 };
 
+const getSupabaseSecretKey = () => {
+  const secretKeys = Deno.env.get('SUPABASE_SECRET_KEYS');
+
+  if (secretKeys) {
+    const parsed = JSON.parse(secretKeys) as Record<string, string | undefined>;
+    const defaultKey = parsed.default;
+
+    if (defaultKey) {
+      return defaultKey;
+    }
+  }
+
+  return (
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+    Deno.env.get('SUPABASE_SECRET_KEY')
+  );
+};
+
 const listUserPhotoPaths = async (
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string
@@ -65,9 +83,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = getEnv('SUPABASE_URL');
-    const serviceRoleKey =
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
-      Deno.env.get('SUPABASE_SECRET_KEY');
+    const serviceRoleKey = getSupabaseSecretKey();
 
     if (!serviceRoleKey) {
       throw new Error('Missing Supabase service role key.');
@@ -110,6 +126,33 @@ Deno.serve(async (req) => {
       if (removeError) {
         throw removeError;
       }
+    }
+
+    const { error: deleteInvitesError } = await supabaseAdmin
+      .from('pet_owner_invites')
+      .delete()
+      .eq('invited_by_user_id', userId);
+
+    if (deleteInvitesError) {
+      throw deleteInvitesError;
+    }
+
+    const { error: updatePetOwnersError } = await supabaseAdmin
+      .from('pet_owners')
+      .update({ invited_by_user_id: null })
+      .eq('invited_by_user_id', userId);
+
+    if (updatePetOwnersError) {
+      throw updatePetOwnersError;
+    }
+
+    const { error: updatePetProfilesError } = await supabaseAdmin
+      .from('pet_profiles')
+      .update({ created_by_user_id: null })
+      .eq('created_by_user_id', userId);
+
+    if (updatePetProfilesError) {
+      throw updatePetProfilesError;
     }
 
     const { error: deleteError } =

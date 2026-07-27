@@ -37,10 +37,6 @@ export const SignupScreen = ({ navigation }: Props) => {
 
     try {
       await signUp(email.trim(), password);
-      Alert.alert(
-        'Account created',
-        'Your account was created. If email confirmation is enabled, check your inbox before logging in.'
-      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to sign up right now.';
